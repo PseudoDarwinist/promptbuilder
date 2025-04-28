@@ -1,0 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-offWhite text-charcoal;
+}
+
+.prompt-card {
+  @apply rounded-xl p-8 transition-all duration-300 bg-white shadow-card;
+}
+
+.button-primary {
+  @apply px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center;
+}
+
+.button-secondary {
+  @apply px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 border border-beige text-darkBrown;
+}
+
+.node-active {
+  @apply shadow-lg scale-110 border-4 border-offWhite;
+}
+
+.node-completed {
+  @apply opacity-90;
+}
+
+.node-upcoming {
+  @apply opacity-60;
+}
