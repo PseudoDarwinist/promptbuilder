@@ -1,35 +1,12 @@
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
+import dbService from '../api/db/database-service';
 
-// Get current directory
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// Database file path
-const dbPath = join(__dirname, '../../database.sqlite');
-
-// Open database connection
-export async function openDb() {
-  return open({
-    filename: dbPath,
-    driver: sqlite3.Database
-  });
-}
-
-// Run migrations
+// No actual migrations are needed with our IndexedDB implementation
+// This is just to maintain API compatibility
 export async function runMigrations() {
-  const db = await openDb();
+  console.log('Running migrations...');
   
-  // Get list of migration files
-  const migrationsDir = join(__dirname, 'migrations');
-  const migrationFiles = fs.readdirSync(migrationsDir)
-    .filter(file => file.endsWith('.sql'))
-    .sort();
-  
-  // Create migrations table if it doesn't exist
-  await db.exec(`
+  // Create the migrations table (just for API compatibility)
+  await dbService.exec(`
     CREATE TABLE IF NOT EXISTS migrations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
@@ -37,39 +14,37 @@ export async function runMigrations() {
     )
   `);
   
-  // Get applied migrations
-  const appliedMigrations = await db.all('SELECT name FROM migrations');
-  const appliedMigrationNames = new Set(appliedMigrations.map(m => m.name));
+  // The actual migrations are handled in the database-service.js file
+  // during the IndexedDB initialization
   
-  // Apply new migrations
-  for (const migrationFile of migrationFiles) {
-    if (!appliedMigrationNames.has(migrationFile)) {
-      console.log(`Applying migration: ${migrationFile}`);
-      
-      const migrationPath = join(migrationsDir, migrationFile);
-      const migrationSql = fs.readFileSync(migrationPath, 'utf8');
-      
-      // Begin transaction
-      await db.exec('BEGIN TRANSACTION');
-      
-      try {
-        // Apply migration
-        await db.exec(migrationSql);
-        
-        // Record migration
-        await db.run('INSERT INTO migrations (name) VALUES (?)', migrationFile);
-        
-        // Commit transaction
-        await db.exec('COMMIT');
-        console.log(`Migration applied: ${migrationFile}`);
-      } catch (error) {
-        // Rollback transaction on error
-        await db.exec('ROLLBACK');
-        console.error(`Migration failed: ${migrationFile}`, error);
-        throw error;
-      }
-    }
+  // Add some test data if the database is empty
+  const journeys = await dbService.all('SELECT * FROM journeys ORDER BY created_at DESC');
+  if (journeys.length === 0) {
+    console.log('Adding sample data...');
+    
+    // Add a sample journey
+    const journeyResult = await dbService.run(
+      'INSERT INTO journeys (name, description, icon) VALUES (?, ?, ?)',
+      ['Getting Started', 'Learn how to use the app', 'BookOpen']
+    );
+    
+    // Add some steps
+    await dbService.run(
+      'INSERT INTO steps (journey_id, step_id, title, description, icon, color, position) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [journeyResult.lastID, 'intro', 'Introduction', 'Welcome to the app', 'Info', '#4CAF50', 0]
+    );
+    
+    await dbService.run(
+      'INSERT INTO steps (journey_id, step_id, title, description, icon, color, position) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [journeyResult.lastID, 'basics', 'Basics', 'Learn the basics', 'Book', '#2196F3', 1]
+    );
   }
   
-  return db;
+  console.log('Migrations complete');
+  return dbService;
+}
+
+// This function isn't needed with our implementation but we keep it for compatibility
+export async function openDb() {
+  return dbService;
 }

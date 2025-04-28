@@ -4,7 +4,9 @@ import { colors } from '../../constants/colors';
 
 const JourneyFooter = () => {
   const { currentStepIndex, steps, currentStep } = useJourneyStore();
-  const progress = steps.length ? Math.round((currentStepIndex / (steps.length - 1)) * 100) : 0;
+  const progress = steps.length > 1 
+    ? Math.round((currentStepIndex / (steps.length - 1)) * 100) 
+    : steps.length === 1 ? 100 : 0;
   
   return (
     <footer 

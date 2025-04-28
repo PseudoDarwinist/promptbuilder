@@ -995,6 +995,623 @@ Read file: src/api/services/stepService.js
 
 ---
 
+```diff
+- import { openDb } from '../../db/database';
++ // Mock data for steps with prompts
++ const mockSteps = [
++   {
++     id: 1,
++     journey_id: 1,
++     title: "Introduction to Prompts",
++     description: "Learn the basics of prompt engineering",
++     icon: "BookOpen",
++     color: "#4CAF50",
++     position: 0,
++     prompt: {
++       id: 1,
++       step_id: 1,
++       content: "This is an example prompt template for introduction",
++       created_at: new Date().toISOString(),
++       updated_at: new Date().toISOString(),
++       tags: [
++         { id: 1, name: "beginner" },
++         { id: 2, name: "introduction" }
++       ]
++     }
++   },
++   {
++     id: 2,
++     journey_id: 1,
++     title: "Basic Prompt Templates",
++     description: "Create your first prompt templates",
++     icon: "FileText",
++     color: "#2196F3",
++     position: 1,
++     prompt: {
++       id: 2,
++       step_id: 2,
++       content: "This is a template for creating basic prompts",
++       created_at: new Date().toISOString(),
++       updated_at: new Date().toISOString(),
++       tags: [
++         { id: 1, name: "beginner" },
++         { id: 3, name: "template" }
++       ]
++     }
++   },
++   {
++     id: 3,
++     journey_id: 2,
++     title: "Chain of Thought",
++     description: "Learn advanced chain of thought techniques",
++     icon: "Lightbulb",
++     color: "#FF9800",
++     position: 0,
++     prompt: {
++       id: 3,
++       step_id: 3,
++       content: "This is a chain of thought prompt example",
++       created_at: new Date().toISOString(),
++       updated_at: new Date().toISOString(),
++       tags: [
++         { id: 4, name: "advanced" },
++         { id: 5, name: "reasoning" }
++       ]
++     }
++   },
++   {
++     id: 4,
++     journey_id: 2,
++     title: "Few-Shot Learning",
++     description: "Use examples to improve AI responses",
++     icon: "Target",
++     color: "#9C27B0",
++     position: 1,
++     prompt: {
++       id: 4,
++       step_id: 4,
++       content: "This is a few-shot learning prompt example",
++       created_at: new Date().toISOString(),
++       updated_at: new Date().toISOString(),
++       tags: [
++         { id: 4, name: "advanced" },
++         { id: 6, name: "examples" }
++       ]
++     }
++   }
++ ];
+  
+  export const stepService = {
+    // Get a step with its prompt
+    async getStepWithPrompt(stepId) {
+-     const db = await openDb();
+-     
+-     // Get step
+-     const step = await db.get('SELECT * FROM steps WHERE id = ?', stepId);
++     const step = mockSteps.find(s => s.id === parseInt(stepId));
+      
+      if (!step) {
+        throw new Error(`Step with ID ${stepId} not found`);
+      }
+      
+-     // Get prompt for step
+-     const prompt = await db.get('SELECT * FROM prompts WHERE step_id = ?', stepId);
+-     
+-     // Get tags for prompt
+-     let tags = [];
+-     if (prompt) {
+-       tags = await db.all(`
+-         SELECT t.id, t.name 
+-         FROM tags t
+-         JOIN prompt_tags pt ON t.id = pt.tag_id
+-         WHERE pt.prompt_id = ?
+-       `, prompt.id);
+-     }
+-     
+-     return { 
+-       ...step, 
+-       prompt: prompt ? { ...prompt, tags } : null 
+-     };
++     return Promise.resolve({...step});
+    },
+    
+    // Get all steps for a journey with their prompts
+    async getStepsWithPrompts(journeyId) {
+-     const db = await openDb();
+-     
+-     // Get steps
+-     const steps = await db.all(
+-       'SELECT * FROM steps WHERE journey_id = ? ORDER BY position ASC',
+-       journeyId
+-     );
+-     
+-     // Get prompts for steps
+-     for (const step of steps) {
+-       const prompt = await db.get('SELECT * FROM prompts WHERE step_id = ?', step.id);
+-       
+-       // Get tags for prompt
+-       let tags = [];
+-       if (prompt) {
+-         tags = await db.all(`
+-           SELECT t.id, t.name 
+-           FROM tags t
+-           JOIN prompt_tags pt ON t.id = pt.tag_id
+-           WHERE pt.prompt_id = ?
+-         `, prompt.id);
+-         
+-         prompt.tags = tags;
+-       }
+-       
+-       step.prompt = prompt || null;
+-     }
+-     
+-     return steps;
++     const steps = mockSteps.filter(s => s.journey_id === parseInt(journeyId))
++       .sort((a, b) => a.position - b.position);
++     
++     return Promise.resolve(JSON.parse(JSON.stringify(steps)));
+    },
+    
+    // Create a new step
+    async createStep(stepData) {
+-     const db = await openDb();
+-     
+-     // Get max position
+-     const maxPos = await db.get(
+-       'SELECT MAX(position) as maxPos FROM steps WHERE journey_id = ?',
+-       stepData.journey_id
+-     );
+-     
+-     const position = maxPos && maxPos.maxPos !== null ? maxPos.maxPos + 1 : 0;
+-     
+-     // Insert step
+-     const result = await db.run(
+-       `INSERT INTO steps (
+-         journey_id, step_id, title, description, icon, color, position
+-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+-       [
+-         stepData.journey_id,
+-         stepData.step_id,
+-         stepData.title,
+-         stepData.description,
+-         stepData.icon,
+-         stepData.color,
+-         position
+-       ]
+-     );
+-     
+-     // If prompt data is provided, insert prompt
+-     if (stepData.prompt) {
+-       const promptResult = await db.run(
+-         'INSERT INTO prompts (step_id, content) VALUES (?, ?)',
+-         [result.lastID, stepData.prompt.content]
+-       );
+-       
+-       // If tags are provided, insert tags
+-       if (stepData.prompt.tags && stepData.prompt.tags.length > 0) {
+-         for (const tagName of stepData.prompt.tags) {
+-           // Check if tag exists
+-           let tag = await db.get('SELECT id FROM tags WHERE name = ?', tagName);
+-           
+-           // If tag doesn't exist, create it
+-           if (!tag) {
+-             const tagResult = await db.run('INSERT INTO tags (name) VALUES (?)', tagName);
+-             tag = { id: tagResult.lastID };
+-           }
+-           
+-           // Associate tag with prompt
+-           await db.run(
+-             'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
+-             [promptResult.lastID, tag.id]
+-           );
+-         }
+-       }
+-     }
+-     
+-     return this.getStepWithPrompt(result.lastID);
++     const position = mockSteps
++       .filter(s => s.journey_id === stepData.journey_id)
++       .reduce((max, s) => Math.max(max, s.position + 1), 0);
++     
++     const newStep = {
++       id: Math.max(...mockSteps.map(s => s.id)) + 1,
++       journey_id: stepData.journey_id,
++       title: stepData.title,
++       description: stepData.description,
++       icon: stepData.icon,
++       color: stepData.color,
++       position,
++       prompt: stepData.prompt ? {
++         id: Math.max(...mockSteps.filter(s => s.prompt).map(s => s.prompt.id)) + 1,
++         step_id: Math.max(...mockSteps.map(s => s.id)) + 1,
++         content: stepData.prompt.content,
++         created_at: new Date().toISOString(),
++         updated_at: new Date().toISOString(),
++         tags: (stepData.prompt.tags || []).map((tag, i) => ({
++           id: i + 1,
++           name: tag
++         }))
++       } : null
++     };
++     
++     mockSteps.push(newStep);
++     return Promise.resolve({...newStep});
+    },
+    
+    // Update a step
+    async updateStep(stepId, stepData) {
+-     const db = await openDb();
+-     
+-     // Update step
+-     await db.run(
+-       `UPDATE steps SET 
+-         title = ?, description = ?, icon = ?, color = ?
+-       WHERE id = ?`,
+-       [
+-         stepData.title,
+-         stepData.description,
+-         stepData.icon,
+-         stepData.color,
+-         stepId
+-       ]
+-     );
+-     
+-     // If prompt data is provided, update prompt
++     const stepIndex = mockSteps.findIndex(s => s.id === parseInt(stepId));
++     
++     if (stepIndex === -1) {
++       throw new Error(`Step with ID ${stepId} not found`);
++     }
++     
++     const updatedStep = {
++       ...mockSteps[stepIndex],
++       title: stepData.title || mockSteps[stepIndex].title,
++       description: stepData.description || mockSteps[stepIndex].description,
++       icon: stepData.icon || mockSteps[stepIndex].icon,
++       color: stepData.color || mockSteps[stepIndex].color
++     };
++     
+      if (stepData.prompt) {
+-       const prompt = await db.get('SELECT id FROM prompts WHERE step_id = ?', stepId);
+-       
+-       if (prompt) {
+-         // Update existing prompt
+-         await db.run(
+-           'UPDATE prompts SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+-           [stepData.prompt.content, prompt.id]
+-         );
+-         
+-         // Update tags if provided
++       if (updatedStep.prompt) {
++         updatedStep.prompt = {
++           ...updatedStep.prompt,
++           content: stepData.prompt.content,
++           updated_at: new Date().toISOString()
++         };
++         
+          if (stepData.prompt.tags) {
+-           // Remove existing tag associations
+-           await db.run('DELETE FROM prompt_tags WHERE prompt_id = ?', prompt.id);
+-           
+-           // Add new tag associations
+-           for (const tagName of stepData.prompt.tags) {
+-             // Check if tag exists
+-             let tag = await db.get('SELECT id FROM tags WHERE name = ?', tagName);
+-             
+-             // If tag doesn't exist, create it
+-             if (!tag) {
+-               const tagResult = await db.run('INSERT INTO tags (name) VALUES (?)', tagName);
+-               tag = { id: tagResult.lastID };
+-             }
+-             
+-             // Associate tag with prompt
+-             await db.run(
+-               'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
+-               [prompt.id, tag.id]
+-             );
+-           }
++           updatedStep.prompt.tags = stepData.prompt.tags.map((tag, i) => ({
++             id: i + 1,
++             name: tag
++           }));
+          }
+        } else {
+-         // Create new prompt
+-         const promptResult = await db.run(
+-           'INSERT INTO prompts (step_id, content) VALUES (?, ?)',
+-           [stepId, stepData.prompt.content]
+-         );
+-         
+-         // Add tags if provided
+-         if (stepData.prompt.tags && stepData.prompt.tags.length > 0) {
+-           for (const tagName of stepData.prompt.tags) {
+-             // Check if tag exists
+-             let tag = await db.get('SELECT id FROM tags WHERE name = ?', tagName);
+-             
+-             // If tag doesn't exist, create it
+-             if (!tag) {
+-               const tagResult = await db.run('INSERT INTO tags (name) VALUES (?)', tagName);
+-               tag = { id: tagResult.lastID };
+-             }
+-             
+-             // Associate tag with prompt
+-             await db.run(
+-               'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
+-               [promptResult.lastID, tag.id]
+-             );
+-           }
+-         }
+-       }
+-     }
+-     
+-     return this.getStepWithPrompt(stepId);
++         updatedStep.prompt = {
++           id: Math.max(...mockSteps.filter(s => s.prompt).map(s => s.prompt.id)) + 1,
++           step_id: parseInt(stepId),
++           content: stepData.prompt.content,
++           created_at: new Date().toISOString(),
++           updated_at: new Date().toISOString(),
++           tags: (stepData.prompt.tags || []).map((tag, i) => ({
++             id: i + 1,
++             name: tag
++           }))
++         };
++       }
++     }
++     
++     mockSteps[stepIndex] = updatedStep;
++     return Promise.resolve({...updatedStep});
+    },
+    
+    // Delete a step
+    async deleteStep(stepId) {
+-     const db = await openDb();
+-     
+-     // Get step for journey_id and position
+-     const step = await db.get('SELECT journey_id, position FROM steps WHERE id = ?', stepId);
++     const stepIndex = mockSteps.findIndex(s => s.id === parseInt(stepId));
+      
+-     if (!step) {
+-       throw new Error(`Step with ID ${stepId} not found`);
+-     }
+-     
+-     // Delete step
+-     await db.run('DELETE FROM steps WHERE id = ?', stepId);
+-     
+-     // Update positions of subsequent steps
+-     await db.run(
+-       'UPDATE steps SET position = position - 1 WHERE journey_id = ? AND position > ?',
+-       [step.journey_id, step.position]
+-     );
+-     
+-     return { id: stepId, deleted: true };
++     if (stepIndex !== -1) {
++       mockSteps.splice(stepIndex, 1);
++     }
++     
++     return Promise.resolve({ id: stepId, deleted: true });
+    },
+    
+-   // Reorder steps
++   // Reorder steps for a journey
+    async reorderSteps(journeyId, stepIds) {
+-     const db = await openDb();
+-     
+-     // Begin transaction
+-     await db.run('BEGIN TRANSACTION');
+-     
+-     try {
+-       // Update position of each step
+-       for (let i = 0; i < stepIds.length; i++) {
+-         await db.run(
+-           'UPDATE steps SET position = ? WHERE id = ? AND journey_id = ?',
+-           [i, stepIds[i], journeyId]
+-         );
+-       }
+-       
+-       // Commit transaction
+-       await db.run('COMMIT');
+-       
+-       return this.getStepsWithPrompts(journeyId);
+-     } catch (error) {
+-       // Rollback transaction on error
+-       await db.run('ROLLBACK');
+-       throw error;
+-     }
++     const journeySteps = mockSteps.filter(s => s.journey_id === parseInt(journeyId));
++     
++     stepIds.forEach((stepId, index) => {
++       const step = mockSteps.find(s => s.id === parseInt(stepId));
++       if (step) {
++         step.position = index;
++       }
++     });
++     
++     return Promise.resolve(
++       mockSteps
++         .filter(s => s.journey_id === parseInt(journeyId))
++         .sort((a, b) => a.position - b.position)
++     );
+    }
+  };
+```
+
+---
+
+Let's restart the development server to see if our fixes resolved the issues:
+
+---
+
+```bash
+npm run dev
+```
+
+```
+
+> prompt-journey-app@0.0.0 dev
+> vite
+
+Port 5173 is in use, trying another one...
+
+  VITE v6.3.3  ready in 133 ms
+
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: use --host to expose
+  ➜  press h + enter to show help
+5:19:24 PM [vite] (client) hmr update /src/routes/index.jsx, /src/index.css
+5:19:24 PM [vite] (client) hmr update /src/App.jsx, /src/index.css
+5:19:24 PM [vite] (client) hmr update /src/index.css, /src/pages/JourneysListPag
+e.jsx, /src/pages/Nar
+rativeJourneyPage.jsx, /src/components/narrative-ui/JourneyProgressBar.jsx, /src
+/components/narrative-ui/NarrativeLayout.jsx, /src/components/narrative-ui/Journ
+eyTimeline.jsx, /src/components/narrative-ui/StageContent.jsx, /src/components/n
+arrative-ui/JourneyHeader.jsx, /src/components/narrative-ui/JourneyFooter.jsx
+
+    5:19:24 PM [vite] (client) hmr update /src/index.css, /src/pages/JourneysLis
+tPage.jsx, /src/pages/Nar
+rativeJourneyPage.jsx, /src/components/narrative-ui/JourneyProgressBar.jsx, /src
+/components/narrative-ui/NarrativeLayout.jsx, /src/components/narrative-ui/Journ
+eyTimeline.jsx, /src/components/narrative-ui/StageContent.jsx, /src/components/n
+arrative-ui/JourneyHeader.jsx, /src/components/narrative-ui/JourneyFooter.jsx (x
+2)
+    5:19:24 PM [vite] (client) hmr update /src/index.css, /src/pages/JourneysLis
+tPage.jsx, /src/pages/Nar
+rativeJourneyPage.jsx, /src/components/narrative-ui/JourneyProgressBar.jsx, /src
+/components/narrative-ui/NarrativeLayout.jsx, /src/components/narrative-ui/Journ
+eyTimeline.jsx, /src/components/narrative-ui/StageContent.jsx, /src/components/n
+arrative-ui/JourneyHeader.jsx, /src/components/narrative-ui/JourneyFooter.jsx (x
+3)
+    5:19:24 PM [vite] (client) hmr update /src/index.css, /src/pages/JourneysLis
+tPage.jsx, /src/pages/Nar
+rativeJourneyPage.jsx, /src/components/narrative-ui/JourneyProgressBar.jsx, /src
+/components/narrative-ui/NarrativeLayout.jsx, /src/components/narrative-ui/Journ
+eyTimeline.jsx, /src/components/narrative-ui/StageContent.jsx, /src/components/n
+arrative-ui/JourneyHeader.jsx, /src/components/narrative-ui/JourneyFooter.jsx (x
+4)
+    5:30:59 PM [vite] (client) hmr update /src/pages/NarrativeJourneyPage.jsx, /
+src/index.css
+5:31:44 PM [vite] (client) hmr update /src/components/narrative-ui/JourneyTimeli
+ne.jsx, /src/index.cs
+s
+                     5:32:03 PM [vite] (client) hmr update /src/components/narra
+tive-ui/StageContent.jsx, /src/index.css
+5:32:22 PM [vite] (client) hmr update /src/components/narrative-ui/JourneyProgre
+ssBar.jsx, /src/index
+.css
+                     5:32:41 PM [vite] (client) hmr update /src/components/narra
+tive-ui/NarrativeLayout.jsx, /src/index.cs
+s
+                     5:33:10 PM [vite] (client) hmr update /src/components/narra
+tive-ui/NarrativeLayout.jsx, /src/index.cs
+s (x2)
+                     5:33:45 PM [vite] (client) hmr update /src/components/narra
+tive-ui/NarrativeLayout.jsx, /src/index.cs
+s (x3)
+                     5:33:54 PM [vite] (client) hmr update /src/components/narra
+tive-ui/JourneyHeader.jsx, /src/index.css
+5:34:09 PM [vite] (client) hmr update /src/components/narrative-ui/JourneyFooter
+.jsx, /src/index.css
+5:34:55 PM [vite] (client) hmr update /src/components/common/Button.jsx, /src/in
+dex.css
+5:35:04 PM [vite] (client) hmr update /src/components/common/Button.jsx, /src/in
+dex.css (x2)
+5:39:58 PM [vite] (client) hmr update /src/pages/NarrativeJourneyPage.jsx, /src/
+index.css
+5:41:19 PM [vite] (client) hmr update /src/index.css, /src/pages/JourneysListPag
+e.jsx, /src/pages/Nar
+rativeJourneyPage.jsx, /src/components/narrative-ui/JourneyProgressBar.jsx, /src
+/components/narrative-ui/NarrativeLayout.jsx, /src/components/narrative-ui/Journ
+eyTimeline.jsx, /src/components/narrative-ui/StageContent.jsx, /src/components/n
+arrative-ui/JourneyHeader.jsx, /src/components/narrative-ui/JourneyFooter.jsx
+
+    5:41:43 PM [vite] (client) hmr update /src/index.css, /src/pages/JourneysLis
+tPage.jsx, /src/pages/Nar
+rativeJourneyPage.jsx, /src/components/narrative-ui/JourneyProgressBar.jsx, /src
+/components/narrative-ui/NarrativeLayout.jsx, /src/components/narrative-ui/Journ
+eyTimeline.jsx, /src/components/narrative-ui/StageContent.jsx, /src/components/n
+arrative-ui/JourneyHeader.jsx, /src/components/narrative-ui/JourneyFooter.jsx (x
+2)
+    5:42:32 PM [vite] (client) hmr update /src/pages/JourneysListPage.jsx, /src/
+index.css, /src/pages/Nar
+rativeJourneyPage.jsx, /src/components/narrative-ui/JourneyProgressBar.jsx, /src
+/components/narrative-ui/NarrativeLayout.jsx, /src/components/narrative-ui/Journ
+eyTimeline.jsx, /src/components/narrative-ui/StageContent.jsx, /src/components/n
+arrative-ui/JourneyHeader.jsx, /src/components/narrative-ui/JourneyFooter.jsx
+
+    6:09:52 PM [vite] (client) hmr update /src/App.jsx, /src/index.css
+6:10:12 PM [vite] vite.config.js changed, restarting server...
+6:10:12 PM [vite] server restarted.
+6:10:12 PM [vite] (client) warning: rewrote fs to false but was not an abolute p
+ath and was not handl
+ed by other plugins. This will lead to duplicated modules for the same path. To
+avoid duplicating modules, you should resolve to an absolute path.
+                                            Plugin: alias
+6:10:12 PM [vite] (client) warning: rewrote events to false but was not an abolu
+te path and was not h
+andled by other plugins. This will lead to duplicated modules for the same path.
+ To avoid duplicating modules, you should resolve to an absolute path.
+                                            Plugin: alias
+✘ [ERROR] Cannot read file: /Users/chetansingh/Documents/AI_Project/Prompt Build
+er/prompt-journey-app
+/false
+                     
+    node_modules/sqlite3/lib/sqlite3.js:3:29:
+      3 │ const EventEmitter = require('events').EventEmitter;
+        ╵                              ~~~~~~~~
+
+6:10:13 PM [vite] (client) warning: rewrote util to false but was not an abolute
+ path and was not han
+dled by other plugins. This will lead to duplicated modules for the same path. T
+o avoid duplicating modules, you should resolve to an absolute path.
+                                            Plugin: alias
+6:10:13 PM [vite] (client) warning: rewrote fs to false but was not an abolute p
+ath and was not handl
+ed by other plugins. This will lead to duplicated modules for the same path. To
+avoid duplicating modules, you should resolve to an absolute path.
+                                            Plugin: alias
+/Users/chetansingh/Documents/AI_Project/Prompt Builder/prompt-journey-app/node_m
+odules/esbuild/lib/ma
+in.js:1477
+                       let error = new Error(text);
+              ^
+
+Error: Build failed with 1 error:
+node_modules/sqlite3/lib/sqlite3.js:3:29: ERROR: Cannot read file: /Users/chetan
+singh/Documents/AI_Pr
+oject/Prompt Builder/prompt-journey-app/false
+                         at failureErrorWithLog (/Users/chetansingh/Documents/AI
+_Project/Prompt Builder/prompt-journey-app
+/node_modules/esbuild/lib/main.js:1477:15)
+                         at /Users/chetansingh/Documents/AI_Project/Prompt Build
+er/prompt-journey-app/node_modules/esbuild
+/lib/main.js:946:25
+                         at /Users/chetansingh/Documents/AI_Project/Prompt Build
+er/prompt-journey-app/node_modules/esbuild
+/lib/main.js:1355:9
+                         at process.processTicksAndRejections (node:internal/pro
+cess/task_queues:95:5) {
+  errors: [Getter/Setter],
+  warnings: [Getter/Setter]
+}
+
+Node.js v20.10.0
+
+```
+
+---
+
+
+
+---
+
+_**User**_
+
+fix
+
+---
+
+_**Assistant**_
+
 
 
 ---

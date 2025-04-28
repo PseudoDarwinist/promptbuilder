@@ -1,5 +1,6 @@
 import React from 'react';
 import classNames from 'classnames';
+import { colors } from '../../constants/colors';
 
 const Button = ({ 
   children, 
@@ -15,7 +16,7 @@ const Button = ({
   
   const variantStyles = {
     primary: 'text-white',
-    secondary: 'border border-beige text-darkBrown hover:bg-black hover:bg-opacity-5',
+    secondary: `border border-beige text-darkBrown hover:bg-black hover:bg-opacity-5`,
     text: 'hover:bg-black hover:bg-opacity-5 text-darkBrown',
     icon: 'p-2 rounded-full hover:bg-black hover:bg-opacity-5'
   };
@@ -30,7 +31,9 @@ const Button = ({
     className
   );
   
-  const buttonStyle = variant === 'primary' && color ? { backgroundColor: color } : {};
+  const buttonStyle = variant === 'primary' && !color 
+    ? { backgroundColor: colors.terracotta } 
+    : variant === 'primary' ? { backgroundColor: color } : {};
   
   return (
     <button

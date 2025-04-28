@@ -36,6 +36,7 @@ export const useJourneyStore = create(
         const journeys = await journeyService.getAllJourneys();
         set({ journeys, loading: false });
       } catch (error) {
+        console.error("Error fetching journeys:", error);
         set({ error: error.message, loading: false });
       }
     },
@@ -49,6 +50,7 @@ export const useJourneyStore = create(
         // Load steps with prompts
         await get().loadSteps(journeyId);
       } catch (error) {
+        console.error("Error loading journey:", error);
         set({ error: error.message, loading: false });
       }
     },
@@ -64,6 +66,7 @@ export const useJourneyStore = create(
         });
         return journey;
       } catch (error) {
+        console.error("Error creating journey:", error);
         set({ error: error.message, loading: false });
         throw error;
       }
@@ -74,17 +77,18 @@ export const useJourneyStore = create(
         set({ loading: true, error: null });
         const journey = await journeyService.updateJourney(journeyId, journeyData);
         set(state => {
-          const index = state.journeys.findIndex(j => j.id === journeyId);
+          const index = state.journeys.findIndex(j => j.id === parseInt(journeyId));
           if (index !== -1) {
             state.journeys[index] = journey;
           }
-          if (state.currentJourney?.id === journeyId) {
+          if (state.currentJourney?.id === parseInt(journeyId)) {
             state.currentJourney = journey;
           }
           state.loading = false;
         });
         return journey;
       } catch (error) {
+        console.error("Error updating journey:", error);
         set({ error: error.message, loading: false });
         throw error;
       }
@@ -95,8 +99,8 @@ export const useJourneyStore = create(
         set({ loading: true, error: null });
         await journeyService.deleteJourney(journeyId);
         set(state => {
-          state.journeys = state.journeys.filter(j => j.id !== journeyId);
-          if (state.currentJourney?.id === journeyId) {
+          state.journeys = state.journeys.filter(j => j.id !== parseInt(journeyId));
+          if (state.currentJourney?.id === parseInt(journeyId)) {
             state.currentJourney = null;
             state.steps = [];
             state.currentStepIndex = 0;
@@ -104,6 +108,7 @@ export const useJourneyStore = create(
           state.loading = false;
         });
       } catch (error) {
+        console.error("Error deleting journey:", error);
         set({ error: error.message, loading: false });
         throw error;
       }
@@ -120,6 +125,7 @@ export const useJourneyStore = create(
           loading: false 
         });
       } catch (error) {
+        console.error("Error loading steps:", error);
         set({ error: error.message, loading: false });
       }
     },
@@ -155,6 +161,7 @@ export const useJourneyStore = create(
         });
         return step;
       } catch (error) {
+        console.error("Error creating step:", error);
         set({ error: error.message, loading: false });
         throw error;
       }
@@ -165,7 +172,7 @@ export const useJourneyStore = create(
         set({ loading: true, error: null });
         const updatedStep = await stepService.updateStep(stepId, stepData);
         set(state => {
-          const index = state.steps.findIndex(s => s.id === stepId);
+          const index = state.steps.findIndex(s => s.id === parseInt(stepId));
           if (index !== -1) {
             state.steps[index] = updatedStep;
           }
@@ -173,6 +180,7 @@ export const useJourneyStore = create(
         });
         return updatedStep;
       } catch (error) {
+        console.error("Error updating step:", error);
         set({ error: error.message, loading: false });
         throw error;
       }
@@ -183,10 +191,14 @@ export const useJourneyStore = create(
         set({ loading: true, error: null });
         await stepService.deleteStep(stepId);
         set(state => {
-          state.steps = state.steps.filter(s => s.id !== stepId);
+          state.steps = state.steps.filter(s => s.id !== parseInt(stepId));
           state.loading = false;
+          if (state.currentStepIndex >= state.steps.length) {
+            state.currentStepIndex = Math.max(0, state.steps.length - 1);
+          }
         });
       } catch (error) {
+        console.error("Error deleting step:", error);
         set({ error: error.message, loading: false });
         throw error;
       }
@@ -201,6 +213,7 @@ export const useJourneyStore = create(
         const steps = await stepService.reorderSteps(currentJourney.id, stepIds);
         set({ steps, loading: false });
       } catch (error) {
+        console.error("Error reordering steps:", error);
         set({ error: error.message, loading: false });
         throw error;
       }

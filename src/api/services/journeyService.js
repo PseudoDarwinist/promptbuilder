@@ -1,88 +1,83 @@
-// Mock data for journeys
-const mockJourneys = [
-  {
-    id: 1,
-    name: "Getting Started with AI Prompts",
-    description: "A beginner's journey to effective prompt engineering",
-    icon: "Sparkles",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    steps: [
-      { id: 1, journey_id: 1, position: 1, title: "Introduction to Prompts" },
-      { id: 2, journey_id: 1, position: 2, title: "Basic Prompt Templates" }
-    ]
-  },
-  {
-    id: 2,
-    name: "Advanced Prompt Techniques",
-    description: "Take your prompts to the next level",
-    icon: "Zap",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    steps: [
-      { id: 3, journey_id: 2, position: 1, title: "Chain of Thought" },
-      { id: 4, journey_id: 2, position: 2, title: "Few-Shot Learning" }
-    ]
-  }
-];
+import dbService from '../db/database-service';
 
 export const journeyService = {
   // Get all journeys
   async getAllJourneys() {
-    return Promise.resolve([...mockJourneys]);
+    try {
+      return await dbService.all('SELECT * FROM journeys ORDER BY created_at DESC');
+    } catch (error) {
+      console.error('Error fetching all journeys:', error);
+      throw error;
+    }
   },
   
   // Get journey by ID with steps
   async getJourneyWithSteps(journeyId) {
-    const journey = mockJourneys.find(j => j.id === parseInt(journeyId));
-    
-    if (!journey) {
-      throw new Error(`Journey with ID ${journeyId} not found`);
+    try {
+      // Get journey
+      const journey = await dbService.get('SELECT * FROM journeys WHERE id = ?', [journeyId]);
+      
+      if (!journey) {
+        throw new Error(`Journey with ID ${journeyId} not found`);
+      }
+      
+      // Get steps for journey
+      const steps = await dbService.all(
+        'SELECT * FROM steps WHERE journey_id = ? ORDER BY position ASC',
+        [journeyId]
+      );
+      
+      return { ...journey, steps };
+    } catch (error) {
+      console.error(`Error fetching journey with ID ${journeyId}:`, error);
+      throw error;
     }
-    
-    return Promise.resolve({...journey});
   },
   
   // Create a new journey
   async createJourney(journeyData) {
-    const newJourney = {
-      id: mockJourneys.length + 1,
-      ...journeyData,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      steps: []
-    };
-    
-    mockJourneys.push(newJourney);
-    return Promise.resolve({...newJourney});
+    try {
+      // Insert journey
+      const result = await dbService.run(
+        'INSERT INTO journeys (name, description, icon) VALUES (?, ?, ?)',
+        [journeyData.name, journeyData.description, journeyData.icon]
+      );
+      
+      // Return the created journey
+      return this.getJourneyWithSteps(result.lastID);
+    } catch (error) {
+      console.error('Error creating journey:', error);
+      throw error;
+    }
   },
   
   // Update a journey
   async updateJourney(journeyId, journeyData) {
-    const journeyIndex = mockJourneys.findIndex(j => j.id === parseInt(journeyId));
-    
-    if (journeyIndex === -1) {
-      throw new Error(`Journey with ID ${journeyId} not found`);
+    try {
+      // Update journey
+      await dbService.run(
+        'UPDATE journeys SET name = ?, description = ?, icon = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [journeyData.name, journeyData.description, journeyData.icon, journeyId]
+      );
+      
+      // Return the updated journey
+      return this.getJourneyWithSteps(journeyId);
+    } catch (error) {
+      console.error(`Error updating journey with ID ${journeyId}:`, error);
+      throw error;
     }
-    
-    const updatedJourney = {
-      ...mockJourneys[journeyIndex],
-      ...journeyData,
-      updated_at: new Date().toISOString()
-    };
-    
-    mockJourneys[journeyIndex] = updatedJourney;
-    return Promise.resolve({...updatedJourney});
   },
   
   // Delete a journey
   async deleteJourney(journeyId) {
-    const journeyIndex = mockJourneys.findIndex(j => j.id === parseInt(journeyId));
-    
-    if (journeyIndex !== -1) {
-      mockJourneys.splice(journeyIndex, 1);
+    try {
+      // Delete journey
+      await dbService.run('DELETE FROM journeys WHERE id = ?', [journeyId]);
+      
+      return { id: journeyId, deleted: true };
+    } catch (error) {
+      console.error(`Error deleting journey with ID ${journeyId}:`, error);
+      throw error;
     }
-    
-    return Promise.resolve({ id: journeyId, deleted: true });
   }
 };

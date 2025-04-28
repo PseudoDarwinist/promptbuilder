@@ -9,7 +9,7 @@ import StepForm from '../components/forms/StepForm';
 import Button from '../components/common/Button';
 import { useJourneyStore } from '../hooks/useJourneyStore';
 import Spinner from '../components/common/Spinner';
-import { Plus, Settings } from 'lucide-react';
+import { Plus, Settings, Trash } from 'lucide-react';
 import { colors } from '../constants/colors';
 
 const NarrativeJourneyPage = () => {
@@ -84,50 +84,50 @@ const NarrativeJourneyPage = () => {
   
   return (
     <NarrativeLayout>
-      {/* Header with actions */}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold" style={{ color: currentStep?.color || colors.terracotta }}>
-          {currentStep?.title || "Welcome to your journey"}
-        </h2>
-        <div className="flex items-center space-x-3">
-          <Button 
-            variant="secondary"
-            icon={<Settings size={16} />}
-            onClick={() => setShowManageModal(true)}
-          >
-            Manage Steps
-          </Button>
-          <Button 
-            variant="primary"
-            icon={<Plus size={16} />}
-            style={{ backgroundColor: colors.sage }}
-            onClick={() => setShowCreateModal(true)}
-          >
-            Add Step
-          </Button>
+      {/* Header with journey info */}
+      <div className="mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold" style={{ color: currentStep?.color || colors.terracotta }}>
+            {currentStep?.title || "Welcome to your journey"}
+          </h2>
+          <div className="flex items-center space-x-3">
+            <Button 
+              variant="secondary"
+              icon={<Settings size={16} />}
+              onClick={() => setShowManageModal(true)}
+            >
+              Manage Steps
+            </Button>
+            <Button 
+              variant="primary"
+              icon={<Plus size={16} />}
+              style={{ backgroundColor: colors.sage }}
+              onClick={() => setShowCreateModal(true)}
+            >
+              Add Step
+            </Button>
+          </div>
         </div>
-      </div>
-      
-      {/* Progress info */}
-      <div className="flex justify-between items-center mb-2">
-        <div className="flex items-center space-x-2 text-sm text-darkBrown">
-          <span>Journey:</span>
-          <span className="font-medium">{currentJourney?.name}</span>
+        
+        {/* Progress info */}
+        <div className="flex justify-between items-center mb-2">
+          <div className="flex items-center space-x-2 text-sm text-darkBrown">
+            <span>Journey:</span>
+            <span className="font-medium">{currentJourney?.name}</span>
+          </div>
+          <span className="text-sm font-medium text-darkBrown">
+            Chapter {useJourneyStore.getState().currentStepIndex + 1} of {steps.length}
+          </span>
         </div>
-        <span className="text-sm font-medium text-darkBrown">
-          Chapter {useJourneyStore.getState().currentStepIndex + 1} of {steps.length}
-        </span>
+        
+        {/* Progress bar */}
+        <JourneyProgressBar />
       </div>
-      
-      {/* Progress bar */}
-      <JourneyProgressBar />
       
       {steps.length > 0 ? (
         <>
-          {/* Timeline visualization */}
-          <div className="mt-8">
-            <JourneyTimeline />
-          </div>
+          {/* Journey timeline visualization */}
+          <JourneyTimeline />
           
           {/* Current stage content */}
           <StageContent />

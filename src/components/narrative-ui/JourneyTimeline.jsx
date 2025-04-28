@@ -2,7 +2,6 @@ import React from 'react';
 import { useJourneyStore } from '../../hooks/useJourneyStore';
 import { colors } from '../../constants/colors';
 import * as LucideIcons from 'lucide-react';
-import { Trash } from 'lucide-react';
 
 const JourneyTimeline = () => {
   const { steps, currentStepIndex, goToStep } = useJourneyStore();
