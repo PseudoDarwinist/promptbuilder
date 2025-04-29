@@ -8352,7 +8352,71 @@ _**Assistant**_
 
 Okay, I understand. The previous `sage` green might have been too dark or saturated. The green in the image is a much lighter, more pastel shade.
 
-Since there isn't an exact match for that specific light green in the predefined color palette, I'll estimate a color based on the image. I'll use `#B5D1AE`, which is a softer, lighter green, and update the text color to `colors.darkBrown` for better readability
+Since there isn't an exact match for that specific light green in the predefined color palette, I'll estimate a color based on the image. I'll use `#B5D1AE`, which is a softer, lighter green, and update the text color to `colors.darkBrown` for better readability against the lighter background.
+
+I will now apply this estimated color to the copy button in `src/components/narrative-ui/StageContent.jsx`.
+
+---
+
+```diff
+                  disabled={!currentStep?.prompt?.content || copyStatus !== 'Copy'}
+                  style={{
+-                   backgroundColor: colors.sage,
+-                   color: colors.offWhite,
++                   backgroundColor: '#B5D1AE',
++                   color: colors.darkBrown,
+                  }}
+                >
+```
+
+---
+
+Alright, I've updated the copy button's background color to the lighter green shade `#B5D1AE` and changed the text color to `darkBrown` for better contrast. Let me know what you think!
+
+---
+
+
+
+---
+
+Alright, I've updated the copy button's background color to the lighter green shade `#B5D1AE` and changed the text color to `darkBrown` for better contrast. Let me know what you think!
+
+Is there anything else I can help you with regarding the styling or functionality?
+
+---
+
+_**User**_
+
+Lets make one more change in the UI.
+I want the journeys as colorful bento cards like this: 
+Only pick the styles. dnt mimic.Make the borders glow like in the example cards.
+Here is how my journey components look like:
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+<details>
+            <summary>Searched codebase "JourneyCard" • **0** results</summary>
+        
+No results found
+</details>
+
+---
+
+It seems the file search didn't complete. Let's try listing the contents of the `src/components/dashboard` directory to locate the `JourneyCard` component.
+
+---
+
+Could not resolve URI: Error: Unable to resolve nonexistent file '/Users/chetansingh/Documents/AI_Project/Prompt Builder/prompt-journey-app/src/components/dashboard'
+
+---
+
+
 
 ---
 
