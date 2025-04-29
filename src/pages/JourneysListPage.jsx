@@ -119,7 +119,7 @@ const JourneysListPage = () => {
                         className="rounded-full px-3 py-1 text-xs"
                         style={{ backgroundColor: colors.beige }}
                       >
-                        {journey.steps?.length || 0} steps
+                        {journey.stepCount ?? 0} steps
                       </div>
                     </div>
                   </div>

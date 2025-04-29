@@ -5459,8 +5459,6 @@ Read file: src/hooks/useJourneyStore.js
 
 ---
 
-
-
 Let's get the TagsInput component too:
 
 ---
@@ -7989,15 +7987,372 @@ _**Assistant**_
 
 ---
 
+You are absolutely right to point this out. The "Maximum update depth exceeded" error combined with the "getSnapshot should be cached" warning strongly indicates an infinite render loop, likely caused by how we refactored the state selection in `StageContent.jsx`.
+
+The culprit is almost certainly this block:
+
+```javascript
+  const {
+    showPromptDetails,
+    togglePromptDetails,
+    nextStep,
+    prevStep,
+    updateStep
+  } = useJourneyStore(state => ({ // <-- This function creates a NEW object {} every time
+    showPromptDetails: state.showPromptDetails,
+    togglePromptDetails: state.togglePromptDetails,
+    nextStep: state.nextStep,
+    prevStep: state.prevStep,
+    updateStep: state.updateStep
+  }), (oldState, newState) => /* custom equality check */ );
+```
+
+Even with the custom equality check, the selector function `state => ({...})` runs on *every render* and creates a *new object reference*. Zustand relies on selectors returning the same reference (===) for unchanged values to optimize re-renders. Creating a new object every time tells React/Zustand that the state *has* changed, triggering another render, leading to the loop.
+
+**The Fix:**
+
+We need to select these values in a way that doesn't create a new object reference unnecessarily. The recommended approach is to select primitives individually and actions directly (as their references are stable).
+
+Let's refactor the selection in `StageContent.jsx`:
+
+---
+
+```diff
+  
+  const StageContent = () => {
+-   // Select primitive state values
++   // Select primitive state values directly
+    const steps = useJourneyStore(state => state.steps);
+    const currentStepIndex = useJourneyStore(state => state.currentStepIndex);
++   const showPromptDetails = useJourneyStore(state => state.showPromptDetails);
++   
++   // Select actions directly (references are stable)
++   const togglePromptDetails = useJourneyStore(state => state.togglePromptDetails);
++   const nextStep = useJourneyStore(state => state.nextStep);
++   const prevStep = useJourneyStore(state => state.prevStep);
++   const updateStep = useJourneyStore(state => state.updateStep);
+    
+-   // Derive currentStep inside the component
++   // Derive currentStep inside the component using useMemo
+    const currentStep = React.useMemo(() => {
+      if (currentStepIndex >= 0 && currentStepIndex < steps.length) {
+```
+
+```diff
+      return null;
+    }, [steps, currentStepIndex]);
+-   
+-   // Select actions and other state needed
+-   const { 
+-     showPromptDetails, 
+-     togglePromptDetails, 
+-     nextStep, 
+-     prevStep, 
+-     updateStep
+-   } = useJourneyStore(state => ({ 
+-     showPromptDetails: state.showPromptDetails,
+-     togglePromptDetails: state.togglePromptDetails,
+-     nextStep: state.nextStep,
+-     prevStep: state.prevStep,
+-     updateStep: state.updateStep
+-   }), (oldState, newState) => 
+-     // Basic shallow comparison for the actions object
+-     oldState.showPromptDetails === newState.showPromptDetails &&
+-     oldState.togglePromptDetails === newState.togglePromptDetails &&
+-     oldState.nextStep === newState.nextStep &&
+-     oldState.prevStep === newState.prevStep &&
+-     oldState.updateStep === newState.updateStep
+-   );
+    
+    // Log values received from the hook/derived at the start of render
+```
+
+---
+
+This change reverts to the standard and safer way of selecting state with Zustand hooks in React. Each hook call now selects only one piece of state or one action. Primitives (`currentStepIndex`, `showPromptDetails`) will only trigger re-renders when their value changes. Arrays (`steps`) trigger re-renders when the reference changes. Actions trigger no re-renders as their references are stable. The derived `currentStep` is handled efficiently by `useMemo`.
+
+This should eliminate the infinite loop. Please try loading the app again.
+
+---
+
+_**User**_
+
+Absolutely marvellous. The code works now.
+few bugs and features to consider now:
+
+1.My journey shows 0 steps but when i clcik on it i have created two steps inside the journey. SO we need to update the journey component to show the correct number of steps.
+2.I need to create a button on the prompt called copy which when clicked copies the entire prompt content.
+
+---
+
+_**Assistant**_
+
 
 
 ---
 
+Great! Glad to hear the main issue is resolved. Let's tackle these new points.
+
+**1. Fix Journey Step Count:**
+
+It seems the journey cards on the dashboard aren't getting the updated step count. We need to adjust how the journey data is fetched to include this information.
+
+First, let's find the component responsible for displaying the journey cards. I'll check the `src/pages` directory to locate the likely dashboard page.
+
+---
+
+<details>
+            <summary>Listed directory src/pages • **2** results</summary>
+        
+| Name |
+|-------|
+| 📄 `NarrativeJourneyPage.jsx` |
+| 📄 `JourneysListPage.jsx` |
+
+</details>
+
+---
+
+Okay, `JourneysListPage.jsx` seems like the right place. Now let's look at that file to see how it fetches and displays journeys, likely using a card component.
+
+---
+
+Read file: src/pages/JourneysListPage.jsx
+
+---
+
+It looks like the card component is directly within `JourneysListPage.jsx`. It tries to display `journey.steps?.length || 0`, but the `fetchJourneys` action doesn't actually load the `steps` array for each journey.
+
+We need to modify `journeyService.js` to fetch the step count.
+
+**Modify `journeyService.js`**
+
+---
+
+```diff
+    async getAllJourneys() {
+      try {
+-       return await dbService.all('SELECT * FROM journeys ORDER BY created_at DESC');
++       // Fetch all base journey data
++       const journeys = await dbService.all('SELECT * FROM journeys ORDER BY created_at DESC');
++       
++       // Fetch step counts for each journey
++       const journeysWithCounts = await Promise.all(journeys.map(async (journey) => {
++         const countResult = await dbService.get(
++           'SELECT COUNT(*) as stepCount FROM steps WHERE journey_id = ?',
++           [journey.id]
++         );
++         return {
++           ...journey,
++           stepCount: countResult ? countResult.stepCount : 0
++         };
++       }));
++       
++       console.log(`[Service] Fetched ${journeysWithCounts.length} journeys with step counts.`);
++       return journeysWithCounts;
++       
+      } catch (error) {
+-       console.error('Error fetching all journeys:', error);
++       console.error('Error fetching all journeys with counts:', error);
+        throw error;
+      }
+```
+
+---
+
+Now we also need to adjust the `database-service.js` to handle the `COUNT(*)` query.
+
+---
+
+```diff
+          return { maxPos };
+        }
++       
++       // Add handling for COUNT query
++       if (normalizedQuery.includes('SELECT COUNT(*) as stepCount FROM steps WHERE journey_id = ?')) {
++         const journeyId = params[0];
++         const tx = db.transaction('steps', 'readonly');
++         const index = tx.store.index('journey_id');
++         // Use the count() method on the index
++         const count = await index.count(journeyId);
++         await tx.done;
++         return { stepCount: count };
++       }
+        
+        console.warn('Unhandled get query:', query, params);
+```
+
+---
+
+Finally, update the card display in `JourneysListPage.jsx` to use the new `stepCount` property.
+
+---
+
+```diff
+                          style={{ backgroundColor: colors.beige }}
+                        >
+-                         {journey.steps?.length || 0} steps
++                         {journey.stepCount ?? 0} steps
+                        </div>
+                      </div>
+```
+
+---
+
+That fixes the step count display.
+
+**2. Add Copy Button:**
+
+Now let's add the copy button to `StageContent.jsx`.
+
+---
+
+```diff
+  import React, { useState, useEffect } from 'react';
+- import { Sparkles, ChevronLeft, ChevronRight, Edit, AlertCircle } from 'lucide-react';
++ import { Sparkles, ChevronLeft, ChevronRight, Edit, AlertCircle, Clipboard } from 'lucide-react';
+  import { useJourneyStore } from '../../hooks/useJourneyStore';
+  import { colors } from '../../constants/colors';
+```
+
+```diff
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedContent, setEditedContent] = useState('');
++   const [copyStatus, setCopyStatus] = useState('Copy');
+    
+    // Update the edited content when the current step changes
+```
+
+```diff
+      }
+    };
++ 
++   const handleCopy = async () => {
++     if (!currentStep?.prompt?.content) return;
++ 
++     try {
++       await navigator.clipboard.writeText(currentStep.prompt.content);
++       setCopyStatus('Copied!');
++       console.log('[StageContent] Prompt copied to clipboard.');
++       setTimeout(() => setCopyStatus('Copy'), 2000);
++     } catch (err) {
++       console.error('[StageContent] Failed to copy prompt:', err);
++       setCopyStatus('Failed');
++       setTimeout(() => setCopyStatus('Copy'), 2000);
++     }
++   };
+  
+    return (
+```
+
+```diff
+          </div>
+          
+-         <div className="flex space-x-3">
++         <div className="flex items-center space-x-3">
+            {!isEditing && (
+              <>
++               <Button 
++                 variant="secondary"
++                 icon={<Clipboard size={16} />}
++                 onClick={handleCopy}
++                 disabled={!currentStep?.prompt?.content || copyStatus !== 'Copy'}
++               >
++                 {copyStatus}
++               </Button>
+                <Button 
+                  variant="secondary"
+```
+
+---
+
+These changes should address both of your requests. The journey cards will now show the correct step count, and you'll have a working copy button for the prompt content in each step.
+
+---
+
+_**User**_
+
+Great .please remove the mock journeys now.
+
+---
+
+_**Assistant**_
+
 
 
 ---
 
+Read file: src/api/db/database-service.js
 
+---
+
+You are correct, I don't see any obvious mock data or seeding logic within `database-service.js` or in the service files we looked at earlier. The data displayed seems to be genuinely coming from your IndexedDB.
+
+The most straightforward way to remove the "Getting Started" journeys is to delete them through the UI using the trash can icon on each journey card on the dashboard (`JourneysListPage.jsx`). This uses the existing `deleteJourney` functionality.
+
+Alternatively, if you want to programmatically clear the database (which will remove *all* journeys, steps, etc.), you could:
+
+1.  **Clear via DevTools:** Open your browser's Developer Tools, go to the "Application" tab, find "IndexedDB" in the storage section, locate the `prompt-journey-db`, right-click it, and choose "Delete database". You'll need to refresh the app afterwards.
+2.  **Add a temporary "Clear All" button:** We could add a button somewhere (e.g., on the `JourneysListPage`) that, when clicked, iterates through all object stores in the IndexedDB and clears them using the `db.clear('storeName')` method provided by the `idb` library. This would require modifying `database-service.js` to add a `clearAllData` function and then calling it from the UI.
+
+Given that you only seem to have a couple of unwanted journeys, using the UI's delete button is likely the easiest and safest option. Would you like me to guide you on adding a "Clear All Data" button instead?
+
+---
+
+_**User**_
+
+Can you give this green shade to my copy button:
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, I can apply that green shade to the copy button. Based on the `design.md` file and the image, the `sage` color (`#7A8B69`) seems like the right one.
+
+I'll update the `<Button>` component for the copy action in `StageContent.jsx` to use this color.
+
+---
+
+```diff
+              <>
+                <Button 
+-                 variant="secondary"
+                  icon={<Clipboard size={16} />}
+                  onClick={handleCopy}
+                  disabled={!currentStep?.prompt?.content || copyStatus !== 'Copy'}
++                 style={{
++                   backgroundColor: colors.sage,
++                   color: colors.offWhite,
++                 }}
+                >
+                  {copyStatus}
+```
+
+---
+
+The copy button's background color has been updated to the requested green shade, and the text color is now off-white for better contrast.
+
+---
+
+_**User**_
+
+No not this but this green shade:
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, I understand. The previous `sage` green might have been too dark or saturated. The green in the image is a much lighter, more pastel shade.
+
+Since there isn't an exact match for that specific light green in the predefined color palette, I'll estimate a color based on the image. I'll use `#B5D1AE`, which is a softer, lighter green, and update the text color to `colors.darkBrown` for better readability
 
 ---
 

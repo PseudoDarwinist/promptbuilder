@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, ChevronLeft, ChevronRight, Edit, AlertCircle } from 'lucide-react';
+import { Sparkles, ChevronLeft, ChevronRight, Edit, AlertCircle, Clipboard } from 'lucide-react';
 import { useJourneyStore } from '../../hooks/useJourneyStore';
 import { colors } from '../../constants/colors';
 import Button from '../common/Button';
@@ -34,6 +34,7 @@ const StageContent = () => {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState('');
+  const [copyStatus, setCopyStatus] = useState('Copy');
   
   // Update the edited content when the current step changes
   useEffect(() => {
@@ -136,6 +137,21 @@ const StageContent = () => {
     }
   };
 
+  const handleCopy = async () => {
+    if (!currentStep?.prompt?.content) return;
+
+    try {
+      await navigator.clipboard.writeText(currentStep.prompt.content);
+      setCopyStatus('Copied!');
+      console.log('[StageContent] Prompt copied to clipboard.');
+      setTimeout(() => setCopyStatus('Copy'), 2000);
+    } catch (err) {
+      console.error('[StageContent] Failed to copy prompt:', err);
+      setCopyStatus('Failed');
+      setTimeout(() => setCopyStatus('Copy'), 2000);
+    }
+  };
+
   return (
     <div className="rounded-xl p-8 transition-all duration-300"
       style={{ 
@@ -153,9 +169,20 @@ const StageContent = () => {
           </p>
         </div>
         
-        <div className="flex space-x-3">
+        <div className="flex items-center space-x-3">
           {!isEditing && (
             <>
+              <Button 
+                icon={<Clipboard size={16} />}
+                onClick={handleCopy}
+                disabled={!currentStep?.prompt?.content || copyStatus !== 'Copy'}
+                style={{
+                  backgroundColor: '#B5D1AE',
+                  color: colors.darkBrown,
+                }}
+              >
+                {copyStatus}
+              </Button>
               <Button 
                 variant="secondary"
                 onClick={togglePromptDetails}

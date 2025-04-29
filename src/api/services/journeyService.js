@@ -4,9 +4,26 @@ export const journeyService = {
   // Get all journeys
   async getAllJourneys() {
     try {
-      return await dbService.all('SELECT * FROM journeys ORDER BY created_at DESC');
+      // Fetch all base journey data
+      const journeys = await dbService.all('SELECT * FROM journeys ORDER BY created_at DESC');
+      
+      // Fetch step counts for each journey
+      const journeysWithCounts = await Promise.all(journeys.map(async (journey) => {
+        const countResult = await dbService.get(
+          'SELECT COUNT(*) as stepCount FROM steps WHERE journey_id = ?',
+          [journey.id]
+        );
+        return {
+          ...journey,
+          stepCount: countResult ? countResult.stepCount : 0
+        };
+      }));
+      
+      console.log(`[Service] Fetched ${journeysWithCounts.length} journeys with step counts.`);
+      return journeysWithCounts;
+      
     } catch (error) {
-      console.error('Error fetching all journeys:', error);
+      console.error('Error fetching all journeys with counts:', error);
       throw error;
     }
   },

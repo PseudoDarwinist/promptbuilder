@@ -109,6 +109,17 @@ const dbService = {
         return { maxPos };
       }
       
+      // Add handling for COUNT query
+      if (normalizedQuery.includes('SELECT COUNT(*) as stepCount FROM steps WHERE journey_id = ?')) {
+        const journeyId = params[0];
+        const tx = db.transaction('steps', 'readonly');
+        const index = tx.store.index('journey_id');
+        // Use the count() method on the index
+        const count = await index.count(journeyId);
+        await tx.done;
+        return { stepCount: count };
+      }
+      
       console.warn('Unhandled get query:', query, params);
       return null;
     } catch (error) {
