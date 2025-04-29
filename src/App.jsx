@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import AppRoutes from './routes';
 import { runMigrations } from './db/database';
 import './index.css';
+import { useThemeStore } from './hooks/useThemeStore';
 
 function App() {
   useEffect(() => {
@@ -16,6 +17,12 @@ function App() {
     };
     
     initDb();
+  }, []);
+
+  // Initialize theme on component mount
+  useEffect(() => {
+    const cleanup = useThemeStore.getState().initializeTheme();
+    return cleanup; // Return cleanup function for when component unmounts
   }, []);
   
   return <AppRoutes />;

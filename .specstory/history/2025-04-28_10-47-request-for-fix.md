@@ -8416,6 +8416,575 @@ Could not resolve URI: Error: Unable to resolve nonexistent file '/Users/chetans
 
 ---
 
+It seems like the path `src/components/dashboard` might not exist or is incorrect. Let's try listing the `src/components` directory to see the available component subdirectories.
+
+---
+
+<details>
+            <summary>Listed directory src/components • **3** results</summary>
+        
+| Name |
+|-------|
+| 📁 `forms` |
+| 📁 `common` |
+| 📁 `narrative-ui` |
+
+</details>
+
+---
+
+Okay, it looks like the dashboard components might be located elsewhere, or perhaps the journey cards are rendered directly within a main dashboard page component.
+
+Let's try searching for files containing "Journey" to find where these cards might be defined or used.
+
+---
+
+<details>
+            <summary>Searched codebase "Journey" • **10** results</summary>
+        
+| File |
+|------|
+| `undefined` |
+| `undefined` |
+| `undefined` |
+| `undefined` |
+| `undefined` |
+| `undefined` |
+| `undefined` |
+| `undefined` |
+| `undefined` |
+| `undefined` |
+
+</details>
+
+---
+
+Okay, the file `src/pages/JourneysListPage.jsx` seems like the most promising location for the dashboard page displaying the journey cards.
+
+I'll read this file to find the component rendering the cards and see how to apply the glowing border style.
+
+---
+
+Read file: src/pages/JourneysListPage.jsx
+
+---
+
+Okay, I've read the `JourneysListPage.jsx` file. The journey cards are rendered within the `journeys.map(...)` loop. The main container for each card is a `div` with the classes `bg-white rounded-xl shadow-card hover:shadow-lg transition-shadow duration-200 overflow-hidden`.
+
+To add the glowing border effect, I'll modify this `div` by adding inline styles for a `box-shadow`. We need different colors for the glow. Let's define a list of glow colors and cycle through them based on the journey's index in the map.
+
+Here's the plan:
+1.  Define an array of glow colors (e.g., pink, blue, orange).
+2.  Inside the `journeys.map` function, calculate the `glowColor` for the current journey based on its index modulo the number of glow colors.
+3.  Add an inline `style` attribute to the main card `div`.
+4.  Apply a `box-shadow` using the calculated `glowColor`. I'll use a style like `0 0 15px 3px ${glowColor}` for the glow effect.
+5.  Adjust the existing `shadow-card` class slightly if needed to blend better with the glow, perhaps by reducing its intensity or removing it if the glow provides enough visual separation. Let's try keeping it for now.
+
+I'll prepare the edit now.
+
+---
+
+```diff
+  import { colors } from '../constants/colors';
+  import * as LucideIcons from 'lucide-react';
++ 
++ // Define glow colors inspired by the example
++ const glowColors = [
++   '#FF6B6B', // Pinkish-Red
++   '#4ECDC4', // Tealish-Blue
++   '#FFA07A', // Light Salmon/Orange
++   '#9381FF', // Lavender (from existing palette)
++ ];
+  
+  const JourneysListPage = () => {
+```
+
+```diff
+          </div>
+        ) : (
+-         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+-           {journeys.map(journey => (
++         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
++           {journeys.map((journey, index) => {
++             // Calculate glow color based on index
++             const glowColor = glowColors[index % glowColors.length];
++             
++             return (
+                <div 
+                  key={journey.id} 
+-               className="bg-white rounded-xl shadow-card hover:shadow-lg transition-shadow duration-200 overflow-hidden"
++                 className="bg-white rounded-xl shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden"
++                 style={{ 
++                   boxShadow: `0 0 15px 3px ${glowColor}, 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)`,
++                 }}
+                >
+                  <div className="p-6">
+```
+
+```diff
+                  </div>
+                </div>
+-           ))}
++             );
++           })}
+            
+            {journeys.length === 0 && (
+```
+
+---
+
+I've updated the `JourneysListPage.jsx` component.
+
+Here's what I did:
+1.  Defined an array `glowColors` with four different colors inspired by your example and the existing palette.
+2.  Inside the `map` function that renders the journey cards, I calculate a `glowColor` for each card by cycling through the `glowColors` array using the card's index.
+3.  Applied an inline `style` to the main `div` of each card.
+4.  Set the `boxShadow` style to include the new colorful glow (`0 0 15px 3px ${glowColor}`) alongside the existing shadow definition to maintain depth.
+5.  Slightly increased the `gap` in the grid layout for better spacing with the glows.
+6.  Added `transition-all` for smoother hover effects.
+
+The cards should now have colorful glowing borders that cycle through the defined colors.
+
+---
+
+_**User**_
+
+Can you include another feature of dark mode , auto, and light mode like this : @design_darkmode.md 
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, I can help integrate a theme toggler like the one in `design_darkmode.md`. This involves several steps:
+
+1.  **Create the Theme Toggle Component:** I'll create a new component file based on the code provided in `design_darkmode.md`.
+2.  **Set up Theme State Management:** We need a way to manage the theme (light, dark, auto) globally. Since you're already using Zustand (`useJourneyStore`), I'll create a new Zustand store specifically for theme management (`useThemeStore`).
+3.  **Apply Theme Changes:** The application's root needs to react to theme changes and apply the correct styles (e.g., adding a `dark` class to the `<html>` element for Tailwind CSS).
+4.  **Place the Toggle:** Add the new `ThemeToggle` component to your UI, for instance, in the header of the `JourneysListPage`.
+
+Let's start by creating the theme store and the toggle component.
+
+**1. Create `useThemeStore.js`**
+
+---
+
+```diff
+- 
++ import { create } from 'zustand';
++ import { persist } from 'zustand/middleware';
++ 
++ // Function to check system preference
++ const getSystemTheme = () => 
++   window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
++ 
++ // Function to apply theme class to HTML element
++ const applyTheme = (theme) => {
++   const root = document.documentElement;
++   const systemTheme = getSystemTheme();
++   
++   if (theme === 'auto') {
++     if (systemTheme === 'dark') {
++       root.classList.add('dark');
++     } else {
++       root.classList.remove('dark');
++     }
++   } else if (theme === 'dark') {
++     root.classList.add('dark');
++   } else {
++     root.classList.remove('dark');
++   }
++   console.log(`[Theme] Applied theme: ${theme === 'auto' ? `auto (${systemTheme})` : theme}`);
++ };
++ 
++ export const useThemeStore = create(
++   persist(
++     (set, get) => ({
++       theme: 'auto', // Default theme preference
++       
++       // Initialize theme based on preference and system setting
++       initializeTheme: () => {
++         const currentThemePreference = get().theme;
++         console.log(`[Theme] Initializing with preference: ${currentThemePreference}`);
++         applyTheme(currentThemePreference);
++ 
++         // Add listener for system theme changes if 'auto' is selected
++         const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
++         const handleChange = () => {
++           if (get().theme === 'auto') {
++             console.log('[Theme] System theme changed, applying auto.');
++             applyTheme('auto');
++           }
++         };
++         mediaQuery.addEventListener('change', handleChange);
++         
++         // Return cleanup function
++         return () => mediaQuery.removeEventListener('change', handleChange);
++       },
++ 
++       // Action to set the theme preference
++       setTheme: (newTheme) => {
++         console.log(`[Theme] Setting theme preference to: ${newTheme}`);
++         set({ theme: newTheme });
++         applyTheme(newTheme);
++       },
++     }),
++     {
++       name: 'theme-storage', // Name of the item in localStorage
++       getStorage: () => localStorage, // Use localStorage for persistence
++     }
++   )
++ );
++ 
++ // Initial call to apply theme on load
++ // This needs to be called once when the app loads, e.g., in App.jsx or index.js
++ // useThemeStore.getState().initializeTheme(); 
++ // We will call initializeTheme from App.jsx 
+```
+
+---
+
+**2. Create `ThemeToggle.jsx`**
+
+---
+
+```diff
+- 
++ import React from \'react\';\nimport { Sun, Moon, Monitor } from \'lucide-react\';\nimport { useThemeStore } from \'../../hooks/useThemeStore\'; // Adjust path as needed\n\nconst ThemeToggle = () => {\n  const { theme: activeTheme, setTheme } = useThemeStore();\n  \n  const handleThemeChange = (newTheme) => {\n    setTheme(newTheme);\n  };\n  \n  return (\n    // Using Tailwind classes for styling, assuming Tailwind is configured\n    // Added dark mode variants for background, border, text, and hover states\n    <div className=\"bg-white dark:bg-gray-700 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 p-1\">\n      <div className=\"flex items-center space-x-1\" role=\"radiogroup\" aria-label=\"Select theme preference\">\n        {[\n          { id: \'light\', icon: Sun, label: \'Light\' },\n          { id: \'dark\', icon: Moon, label: \'Dark\' },\n          { id: \'auto\', icon: Monitor, label: \'Auto\' }\n        ].map((themeOption) => {\n          const isActive = activeTheme === themeOption.id;\n          const ThemeIcon = themeOption.icon;\n          \n          return (\n            <button\n              key={themeOption.id}\n              className={`flex items-center justify-center px-3 py-1.5 rounded-md transition-colors duration-200 text-xs sm:text-sm ${ // Adjusted padding and text size\n                isActive \n                  ? \'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-100 shadow-inner\' \n                  : \'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600/50 hover:text-gray-700 dark:hover:text-gray-200\'\n              }`}\n              onClick={() => handleThemeChange(themeOption.id)}\n              role=\"radio\"\n              aria-checked={isActive}\n              aria-label={`${themeOption.label} theme`}\n              title={`${themeOption.label} Theme`}\n            >\n              <ThemeIcon \n                size={16} // Adjusted icon size\n                className={\`mr-1.5 ${isActive ? \'text-blue-600 dark:text-blue-400\' : \'\'}\`} // Added color to active icon\n              />\n              {themeOption.label}\n            </button>\n          );\n        })}\n      </div>\n    </div>\n  );\n};\n\nexport default ThemeToggle; 
+```
+
+---
+
+It seems the backslashes in the React import and other strings caused linting errors. Let me fix that.
+
+---
+
+```diff
+- import React from \'react\';\nimport { Sun, Moon, Monitor } from \'lucide-react\';\nimport { useThemeStore } from \'../../hooks/useThemeStore\'; // Adjust path as needed\n\nconst ThemeToggle = () => {\n  const { theme: activeTheme, setTheme } = useThemeStore();\n  \n  const handleThemeChange = (newTheme) => {\n    setTheme(newTheme);\n  };\n  \n  return (\n    // Using Tailwind classes for styling, assuming Tailwind is configured\n    // Added dark mode variants for background, border, text, and hover states\n    <div className=\"bg-white dark:bg-gray-700 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 p-1\">\n      <div className=\"flex items-center space-x-1\" role=\"radiogroup\" aria-label=\"Select theme preference\">\n        {[\n          { id: \'light\', icon: Sun, label: \'Light\' },\n          { id: \'dark\', icon: Moon, label: \'Dark\' },\n          { id: \'auto\', icon: Monitor, label: \'Auto\' }\n        ].map((themeOption) => {\n          const isActive = activeTheme === themeOption.id;\n          const ThemeIcon = themeOption.icon;\n          \n          return (\n            <button\n              key={themeOption.id}\n              className={`flex items-center justify-center px-3 py-1.5 rounded-md transition-colors duration-200 text-xs sm:text-sm ${ // Adjusted padding and text size\n                isActive \n                  ? \'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-100 shadow-inner\' \n                  : \'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600/50 hover:text-gray-700 dark:hover:text-gray-200\'\n              }`}\n              onClick={() => handleThemeChange(themeOption.id)}\n              role=\"radio\"\n              aria-checked={isActive}\n              aria-label={`${themeOption.label} theme`}\n              title={`${themeOption.label} Theme`}\n            >\n              <ThemeIcon \n                size={16} // Adjusted icon size\n                className={\`mr-1.5 ${isActive ? \'text-blue-600 dark:text-blue-400\' : \'\'}\`} // Added color to active icon\n              />\n              {themeOption.label}\n            </button>\n          );\n        })}\n      </div>\n    </div>\n  );\n};\n\nexport default ThemeToggle; 
++ import React from 'react';
++ import { Sun, Moon, Monitor } from 'lucide-react';
++ import { useThemeStore } from '../../hooks/useThemeStore'; // Adjust path as needed
++ 
++ const ThemeToggle = () => {
++   const { theme: activeTheme, setTheme } = useThemeStore();
++ 
++   const handleThemeChange = (newTheme) => {
++     setTheme(newTheme);
++   };
++ 
++   return (
++     // Using Tailwind classes for styling, assuming Tailwind is configured
++     // Added dark mode variants for background, border, text, and hover states
++     <div className="bg-white dark:bg-gray-700 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 p-1">
++       <div className="flex items-center space-x-1" role="radiogroup" aria-label="Select theme preference">
++         {[
++           { id: 'light', icon: Sun, label: 'Light' },
++           { id: 'dark', icon: Moon, label: 'Dark' },
++           { id: 'auto', icon: Monitor, label: 'Auto' }
++         ].map((themeOption) => {
++           const isActive = activeTheme === themeOption.id;
++           const ThemeIcon = themeOption.icon;
++ 
++           return (
++             <button
++               key={themeOption.id}
++               className={`flex items-center justify-center px-3 py-1.5 rounded-md transition-colors duration-200 text-xs sm:text-sm ${ // Adjusted padding and text size
++                 isActive
++                   ? 'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-100 shadow-inner'
++                   : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600/50 hover:text-gray-700 dark:hover:text-gray-200'
++               }`}
++               onClick={() => handleThemeChange(themeOption.id)}
++               role="radio"
++               aria-checked={isActive}
++               aria-label={`${themeOption.label} theme`}
++               title={`${themeOption.label} Theme`}
++             >
++               <ThemeIcon
++                 size={16} // Adjusted icon size
++                 className={`mr-1.5 ${isActive ? 'text-blue-600 dark:text-blue-400' : ''}`} // Added color to active icon
++               />
++               {themeOption.label}
++             </button>
++           );
++         })}
++       </div>
++     </div>
++   );
++ };
++ 
++ export default ThemeToggle; 
+```
+
+---
+
+**3. Initialize Theme in App Root**
+
+Now, we need to call the `initializeTheme` function from our store when the app loads. This is typically done in your main `App.jsx` or `main.jsx`/`index.jsx` file. I'll assume you have an `App.jsx`.
+
+---
+
+```diff
+  import { runMigrations } from './db/database';
+  import './index.css';
++ import { useThemeStore } from './hooks/useThemeStore';
+  
+  function App() {
+```
+
+```diff
+      initDb();
+    }, []);
++ 
++   // Initialize theme on component mount
++   useEffect(() => {
++     const cleanup = useThemeStore.getState().initializeTheme();
++     return cleanup; // Return cleanup function for when component unmounts
++   }, []);
+    
+    return <AppRoutes />;
+```
+
+---
+
+**4. Add ThemeToggle to `JourneysListPage.jsx`**
+
+Finally, let's add the toggle component to the page. I'll place it in the header, next to the "Create New Journey" button.
+
+---
+
+```diff
+  import { colors } from '../constants/colors';
+  import * as LucideIcons from 'lucide-react';
++ import ThemeToggle from '../components/common/ThemeToggle';
+  
+  // Define glow colors inspired by the example
+```
+
+```diff
+    
+    return (
+-     <div className="min-h-screen bg-offWhite p-8">
+-       <header className="mb-8">
++     <div className="min-h-screen bg-offWhite dark:bg-gray-900 p-8 transition-colors duration-200">
++       <header className="mb-8 flex justify-between items-center">
+          <div className="flex items-center">
+            <div 
+```
+
+```diff
+            </div>
+            <div>
+-             <h1 className="text-2xl font-semibold text-charcoal">PromptFlow</h1>
+-             <p className="text-darkBrown">Your prompt journey library</p>
++             <h1 className="text-2xl font-semibold text-charcoal dark:text-gray-100">PromptFlow</h1>
++             <p className="text-darkBrown dark:text-gray-400">Your prompt journey library</p>
+            </div>
+          </div>
++         <ThemeToggle />
+        </header>
+        
+        <div className="flex justify-between items-center mb-6">
+-         <h2 className="text-xl font-semibold text-charcoal">Your Journeys</h2>
++         <h2 className="text-xl font-semibold text-charcoal dark:text-gray-200">Your Journeys</h2>
+          <Button 
+            variant="primary" 
+```
+
+```diff
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {journeys.map((journey, index) => {
+-             // Calculate glow color based on index
+              const glowColor = glowColors[index % glowColors.length];
+              
+              return (
+                <div 
+                  key={journey.id} 
+-                 className="bg-white rounded-xl shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden"
++                 className="bg-white dark:bg-gray-800 rounded-xl shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden"
+                  style={{ 
+                    boxShadow: `0 0 15px 3px ${glowColor}, 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)`,
+```
+
+```diff
+                    <div className="flex items-start">
+                      <div 
+-                       className="w-10 h-10 rounded-full flex items-center justify-center mr-4"
+-                       style={{ backgroundColor: colors.sage + '20' }}
++                       className="w-10 h-10 rounded-full flex items-center justify-center mr-4 bg-sage-100 dark:bg-gray-700"
+                      >
+                        {renderIcon(journey.icon)}
+                      </div>
+                      <div className="flex-1">
+-                       <h3 className="text-lg font-semibold text-charcoal mb-2">{journey.name}</h3>
+-                       <p className="text-sm text-darkBrown mb-4">{journey.description}</p>
++                       <h3 className="text-lg font-semibold text-charcoal dark:text-gray-100 mb-2">{journey.name}</h3>
++                       <p className="text-sm text-darkBrown dark:text-gray-300 mb-4">{journey.description}</p>
+                        <div className="flex justify-between items-center">
+-                         <span className="text-xs text-darkBrown">
++                         <span className="text-xs text-darkBrown dark:text-gray-400">
+                            Created: {new Date(journey.created_at).toLocaleDateString()}
+                          </span>
+                          <div 
+-                           className="rounded-full px-3 py-1 text-xs"
+-                           style={{ backgroundColor: colors.beige }}
++                           className="rounded-full px-3 py-1 text-xs bg-beige dark:bg-gray-600 text-darkBrown dark:text-gray-200"
+                          >
+                            {journey.stepCount ?? 0} steps
+```
+
+```diff
+                  </div>
+                  
+-                 <div className="border-t border-beige p-3 bg-offWhite bg-opacity-50 flex">
++                 <div className="border-t border-beige dark:border-gray-700 p-3 bg-offWhite dark:bg-gray-700/50 bg-opacity-50 flex">
+                    <Link 
+                      to={`/journey/${journey.id}`}
+-                     className="flex-1 py-2 px-3 rounded-lg text-center text-sm font-medium text-darkBrown hover:bg-beige transition-colors"
++                     className="flex-1 py-2 px-3 rounded-lg text-center text-sm font-medium text-darkBrown dark:text-gray-200 hover:bg-beige dark:hover:bg-gray-600 transition-colors"
+                    >
+                      Open Journey
+                    </Link>
+                    <button
+                      onClick={() => openEditModal(journey)}
+-                     className="ml-2 p-2 rounded-lg text-darkBrown hover:bg-beige transition-colors"
++                     className="ml-2 p-2 rounded-lg text-darkBrown dark:text-gray-300 hover:bg-beige dark:hover:bg-gray-600 transition-colors"
+                      aria-label="Edit"
+                    >
+```
+
+```diff
+                    <button
+                      onClick={() => openDeleteModal(journey)}
+-                     className="ml-2 p-2 rounded-lg text-darkBrown hover:bg-beige transition-colors"
++                     className="ml-2 p-2 rounded-lg text-darkBrown dark:text-gray-300 hover:bg-beige dark:hover:bg-gray-600 transition-colors"
+                      aria-label="Delete"
+                    >
+```
+
+```diff
+            
+            {journeys.length === 0 && (
+-             <div className="col-span-full text-center py-12 bg-white rounded-xl shadow-card">
+-               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-beige flex items-center justify-center">
+-                 <Clipboard size={28} color={colors.darkBrown} />
++             <div className="col-span-full text-center py-12 bg-white dark:bg-gray-800 rounded-xl shadow-card">
++               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-beige dark:bg-gray-700 flex items-center justify-center">
++                 <Clipboard size={28} color={colors.darkBrown} className="dark:text-gray-300"/>
+                </div>
+-               <p className="text-darkBrown mb-4">You don't have any journeys yet.</p>
++               <p className="text-darkBrown dark:text-gray-300 mb-4">You don\'t have any journeys yet.</p>
+                <Button 
+                  variant="primary" 
+```
+
+---
+
+Okay, the theme toggler is now integrated.
+
+Here's a summary of the changes:
+1.  Created `src/hooks/useThemeStore.js` to manage theme state (light/dark/auto) using Zustand and localStorage persistence. It includes logic to apply the theme to the HTML element and listen for system changes in 'auto' mode.
+2.  Created `src/components/common/ThemeToggle.jsx` based on your example, connecting it to the `useThemeStore`.
+3.  Updated `src/App.jsx` to initialize the theme from the store when the application loads.
+4.  Added the `<ThemeToggle />` component to the header of `src/pages/JourneysListPage.jsx`.
+5.  Added basic `dark:` variants to several elements within `JourneysListPage.jsx` (backgrounds, text colors, borders) to provide initial dark mode support.
+
+You should now see the theme toggle in the header, and it should switch the application between light, dark, and auto modes, persisting your preference. You might need to further refine the dark mode styles across your application, including modals and other components, to ensure everything looks correct.
+
+---
+
+_**User**_
+
+No does not work. The entire app is in dark mode only:
+
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, it seems like the theme switching mechanism isn't correctly removing the `dark` class or applying the light mode styles, even if the state seems to update.
+
+Could you please check a couple of things using your browser's developer tools?
+
+1.  **Inspect the `<html>` Element:**
+    *   Right-click anywhere on the page and choose "Inspect" or "Inspect Element".
+    *   Go to the "Elements" tab.
+    *   Find the top-level `<html>` tag.
+    *   When you click the "Light" button in the toggle, does the `class="dark"` attribute get removed from the `<html>` tag? When you click "Dark", does it get added back?
+
+2.  **Check Console Logs:**
+    *   Go to the "Console" tab in the developer tools.
+    *   Try clicking the "Light", "Dark", and "Auto" buttons.
+    *   You should see messages like `[Theme] Setting theme preference to: light` and `[Theme] Applied theme: light` (or dark/auto). Do these logs appear correctly reflect the button you clicked?
+
+Knowing whether the `dark` class is being toggled on the `<html>` element and what the console logs say will help pinpoint if the issue is in the state management, the theme application logic, or the Tailwind CSS configuration/styles.
+
+---
+
+_**User**_
+
+yes class dark gets removed from html tag.
+console logs:
+when clicking on toggles
+useThemeStore.js:54 [Theme] Setting theme preference to: dark
+useThemeStore.js:24 [Theme] Applied theme: dark
+useThemeStore.js:54 [Theme] Setting theme preference to: light
+useThemeStore.js:24 [Theme] Applied theme: light
+useThemeStore.js:54 [Theme] Setting theme preference to: auto
+useThemeStore.js:24 [Theme] Applied theme: auto (dark)
+
+
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, thanks for confirming that.
+
+Since the `dark` class *is* being correctly removed from the `<html>` tag and the theme state seems to be updating properly, the issue likely lies in how the Tailwind CSS styles are defined or configured.
+
+Here are the most common reasons this happens:
+
+1.  **Tailwind Configuration:** We need to ensure `tailwind.config.js` explicitly uses the `class` strategy for dark mode.
+2.  **Missing Light Mode Styles:** Sometimes, when adding `dark:` variants, we forget to define the corresponding *light mode* styles. Tailwind's `dark:` variants only apply when the `dark` class is present. If there's no explicit light style, the element might fall back to a base style that looks dark, or inherit it.
+3.  **Global CSS Overrides:** Styles in `src/index.css` might be setting dark backgrounds or text colors globally without respecting the theme class.
+
+Let's check these possibilities.
+
+First, I'll examine your Tailwind configuration file.
+
+---
+
+Read file: tailwind.config.js
+
+---
+
+Okay, the `tailwind.config.js` file **does not** have the `darkMode: 'class'` setting. This is the most likely cause of the problem. Tailwind defaults to the `media` strategy (using `prefers-color-scheme`), which wouldn't work with our class-based toggle.
+
+Let's add `darkMode: 'class'` to the configuration file.
+
+---
+
+```diff
+  /** @type {import('tailwindcss').Config} */
+  export default {
++   darkMode: 'class',
+    content: [
+      "./index.html",
+```
+
+---
+
 
 
 ---
