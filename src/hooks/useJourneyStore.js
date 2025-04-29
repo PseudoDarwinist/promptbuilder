@@ -9,16 +9,10 @@ export const useJourneyStore = create(
     journeys: [],
     currentJourney: null,
     steps: [],
-    currentStepIndex: 0,
+    currentStepIndex: -1,
     loading: false,
     error: null,
     showPromptDetails: true,
-    
-    // Computed values
-    get currentStep() {
-      const { steps, currentStepIndex } = get();
-      return steps.length > 0 ? steps[currentStepIndex] : null;
-    },
     
     // Actions
     clearError: () => set({ error: null }),
@@ -103,7 +97,7 @@ export const useJourneyStore = create(
           if (state.currentJourney?.id === parseInt(journeyId)) {
             state.currentJourney = null;
             state.steps = [];
-            state.currentStepIndex = 0;
+            state.currentStepIndex = -1;
           }
           state.loading = false;
         });
@@ -119,21 +113,57 @@ export const useJourneyStore = create(
       try {
         set({ loading: true, error: null });
         const steps = await stepService.getStepsWithPrompts(journeyId);
-        set({ 
-          steps,
-          currentStepIndex: 0,
-          loading: false 
+        
+        console.log(`Loaded ${steps.length} steps for journey ${journeyId} from service.`);
+        
+        // Ensure each step has at least an empty prompt object
+        const stepsWithPrompts = steps.map(step => {
+          if (!step.prompt) {
+            console.log(`Step ${step.id} is missing prompt, initializing.`);
+            return {
+              ...step,
+              prompt: { content: "", tags: [] }
+            };
+          }
+          return step;
         });
+        
+        // Set steps and RESET currentStepIndex to 0, ensure loading is false
+        set({
+          steps: stepsWithPrompts,
+          currentStepIndex: stepsWithPrompts.length > 0 ? 0 : -1,
+          loading: false,
+          error: null
+        });
+
+        console.log(`[Store Action] loadSteps finished set() call. Index set to: ${stepsWithPrompts.length > 0 ? 0 : -1}`);
+
+        // Log state IMMEDIATELY after setting using get()
+        const postUpdateState = get();
+        console.log(`[Store Action] State immediately after set: index=${postUpdateState.currentStepIndex}, steps=${postUpdateState.steps.length}`);
+        const postUpdateStep = postUpdateState.currentStep; // Explicitly call getter
+        console.log(`[Store Action] currentStep from getter post-set: ${postUpdateStep ? postUpdateStep.title : 'null'}`);
+
+        return stepsWithPrompts;
       } catch (error) {
-        console.error("Error loading steps:", error);
-        set({ error: error.message, loading: false });
+        console.error("Error loading steps in store:", error);
+        set({ error: error.message, loading: false, steps: [], currentStepIndex: -1 });
+        return [];
       }
     },
     
     goToStep: (index) => {
-      const { steps } = get();
+      const { steps } = get(); // Get current steps for validation
+      
+      console.log(`[Store Action] goToStep: Attempting to go to index: ${index}, steps.length: ${steps.length}`);
+      
+      // Validate index against the current steps array length
       if (index >= 0 && index < steps.length) {
+        console.log(`[Store Action] goToStep: Setting currentStepIndex to: ${index}`);
         set({ currentStepIndex: index });
+        // No need to log the getter result here, let components react
+      } else {
+        console.warn(`[Store Action] goToStep: Invalid step index: ${index} (valid range: 0-${steps.length - 1})`);
       }
     },
     
@@ -155,10 +185,17 @@ export const useJourneyStore = create(
       try {
         set({ loading: true, error: null });
         const step = await stepService.createStep(stepData);
+        
         set(state => {
+          // Add the new step to the steps array
           state.steps.push(step);
+          // Set the current step index to the new step (which is the last one)
+          state.currentStepIndex = state.steps.length - 1;
           state.loading = false;
         });
+        
+        // Log after updating state
+        console.log(`Step created and set as current step:`, step);
         return step;
       } catch (error) {
         console.error("Error creating step:", error);

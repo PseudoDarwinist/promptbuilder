@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import NarrativeLayout from '../components/narrative-ui/NarrativeLayout';
 import JourneyProgressBar from '../components/narrative-ui/JourneyProgressBar';
 import JourneyTimeline from '../components/narrative-ui/JourneyTimeline';
@@ -9,16 +9,18 @@ import StepForm from '../components/forms/StepForm';
 import Button from '../components/common/Button';
 import { useJourneyStore } from '../hooks/useJourneyStore';
 import Spinner from '../components/common/Spinner';
-import { Plus, Settings, Trash } from 'lucide-react';
+import { Plus, Settings, Trash, AlertTriangle } from 'lucide-react';
 import { colors } from '../constants/colors';
 
 const NarrativeJourneyPage = () => {
   const { journeyId } = useParams();
+  const navigate = useNavigate();
   const { 
     currentStep, 
     currentJourney, 
     steps, 
     loading, 
+    error,
     loadJourney, 
     loadSteps,
     createStep,
@@ -33,33 +35,70 @@ const NarrativeJourneyPage = () => {
   const [stepToEdit, setStepToEdit] = useState(null);
   const [stepToDelete, setStepToDelete] = useState(null);
   
+  // Parse the journeyId as a number
+  const numericJourneyId = journeyId ? parseInt(journeyId, 10) : null;
+  
   useEffect(() => {
-    if (journeyId) {
-      loadJourney(journeyId);
+    if (numericJourneyId) {
+      console.log(`Loading journey with ID: ${numericJourneyId}`);
+      loadJourney(numericJourneyId);
+    } else {
+      console.error('No valid journey ID in URL params');
     }
-  }, [journeyId, loadJourney]);
+  }, [numericJourneyId, loadJourney]);
   
   useEffect(() => {
     if (currentJourney?.id) {
-      loadSteps(currentJourney.id);
+      console.log(`NarrativeJourneyPage: useEffect detected currentJourney ID ${currentJourney.id}, calling loadSteps.`);
+      loadSteps(currentJourney.id); // Just call loadSteps, the store handles the index now
     }
   }, [currentJourney?.id, loadSteps]);
   
   const handleCreateStep = async (stepData) => {
-    await createStep(stepData);
-    setShowCreateModal(false);
+    try {
+      console.log('Creating step with data:', stepData);
+      const newStep = await createStep(stepData);
+      
+      // Find the newly created step's index in the steps array
+      const newStepIndex = steps.findIndex(step => step.id === newStep.id);
+      
+      // If the step isn't in the array yet, we'll need to reload steps
+      if (newStepIndex === -1) {
+        await loadSteps(currentJourney.id);
+        // After reloading, the new step should be the last one
+        useJourneyStore.setState({ currentStepIndex: steps.length });
+      } else {
+        // Set the current step index to the new step
+        useJourneyStore.setState({ currentStepIndex: newStepIndex });
+      }
+      
+      setShowCreateModal(false);
+    } catch (error) {
+      console.error('Error creating step:', error);
+      alert(`Failed to create step: ${error.message}`);
+    }
   };
   
   const handleUpdateStep = async (stepData) => {
-    await updateStep(stepToEdit.id, stepData);
-    setShowEditModal(false);
-    setStepToEdit(null);
+    try {
+      await updateStep(stepToEdit.id, stepData);
+      setShowEditModal(false);
+      setStepToEdit(null);
+    } catch (error) {
+      console.error('Error updating step:', error);
+      alert(`Failed to update step: ${error.message}`);
+    }
   };
   
   const handleDeleteStep = async () => {
-    await deleteStep(stepToDelete.id);
-    setShowDeleteModal(false);
-    setStepToDelete(null);
+    try {
+      await deleteStep(stepToDelete.id);
+      setShowDeleteModal(false);
+      setStepToDelete(null);
+    } catch (error) {
+      console.error('Error deleting step:', error);
+      alert(`Failed to delete step: ${error.message}`);
+    }
   };
   
   const openEditModal = (step) => {
@@ -82,6 +121,25 @@ const NarrativeJourneyPage = () => {
     );
   }
   
+  // Handle journey not found error
+  if (error && !loading) {
+    return (
+      <NarrativeLayout>
+        <div className="flex flex-col items-center justify-center h-full">
+          <AlertTriangle size={48} className="text-red-500 mb-4" />
+          <h2 className="text-xl font-bold mb-2">Journey Not Found</h2>
+          <p className="text-darkBrown mb-6">The journey you are looking for does not exist or could not be loaded.</p>
+          <Button
+            variant="primary"
+            onClick={() => navigate('/')}
+          >
+            Return to Dashboard
+          </Button>
+        </div>
+      </NarrativeLayout>
+    );
+  }
+  
   return (
     <NarrativeLayout>
       {/* Header with journey info */}
@@ -90,33 +148,36 @@ const NarrativeJourneyPage = () => {
           <h2 className="text-2xl font-bold" style={{ color: currentStep?.color || colors.terracotta }}>
             {currentStep?.title || "Welcome to your journey"}
           </h2>
-          <div className="flex items-center space-x-3">
-            <Button 
-              variant="secondary"
-              icon={<Settings size={16} />}
-              onClick={() => setShowManageModal(true)}
-            >
-              Manage Steps
-            </Button>
-            <Button 
-              variant="primary"
-              icon={<Plus size={16} />}
-              style={{ backgroundColor: colors.sage }}
-              onClick={() => setShowCreateModal(true)}
-            >
-              Add Step
-            </Button>
-          </div>
+          {currentJourney && (
+            <div className="flex items-center space-x-3">
+              <Button 
+                variant="secondary"
+                icon={<Settings size={16} />}
+                onClick={() => setShowManageModal(true)}
+              >
+                Manage Steps
+              </Button>
+              <Button 
+                variant="primary"
+                icon={<Plus size={16} />}
+                style={{ backgroundColor: colors.sage }}
+                onClick={() => setShowCreateModal(true)}
+                disabled={!currentJourney?.id}
+              >
+                Add Step
+              </Button>
+            </div>
+          )}
         </div>
         
         {/* Progress info */}
         <div className="flex justify-between items-center mb-2">
           <div className="flex items-center space-x-2 text-sm text-darkBrown">
             <span>Journey:</span>
-            <span className="font-medium">{currentJourney?.name}</span>
+            <span className="font-medium">{currentJourney?.name || 'Loading...'}</span>
           </div>
           <span className="text-sm font-medium text-darkBrown">
-            Chapter {useJourneyStore.getState().currentStepIndex + 1} of {steps.length}
+            {steps.length > 0 ? `Chapter ${useJourneyStore.getState().currentStepIndex + 1} of ${steps.length}` : 'No steps yet'}
           </span>
         </div>
         
@@ -146,6 +207,7 @@ const NarrativeJourneyPage = () => {
             icon={<Plus size={18} />} 
             style={{ backgroundColor: colors.terracotta }}
             onClick={() => setShowCreateModal(true)}
+            disabled={!currentJourney?.id}
           >
             Add Your First Step
           </Button>

@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { colors } from '../../constants/colors';
 import Button from '../common/Button';
 import TagsInput from '../common/TagsInput';
-import * as LucideIcons from 'lucide-react';
+import { 
+  Compass, Map, Code, Zap, BookOpen, 
+  Lightbulb, Layers, PenTool, FileText,
+  MessageSquare, Feather, Settings, Wrench, CheckSquare,
+  Check, AlertTriangle 
+} from 'lucide-react';
 
 const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
   const [formData, setFormData] = useState({
-    journey_id: journeyId,
+    journey_id: journeyId || initialData.journey_id,
     step_id: initialData.step_id || '',
     title: initialData.title || '',
     description: initialData.description || '',
@@ -18,13 +23,30 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
     }
   });
   
+  // Update journey_id if it changes
+  useEffect(() => {
+    if (journeyId) {
+      setFormData(prev => ({
+        ...prev,
+        journey_id: journeyId
+      }));
+    }
+  }, [journeyId]);
+  
   const [errors, setErrors] = useState({});
   
   const iconOptions = [
     'Compass', 'Map', 'Code', 'Zap', 'BookOpen', 
-    'Lightbulb', 'Brain', 'Layers', 'PenTool', 'FileText',
-    'MessageSquare', 'Feather', 'Settings', 'Tool', 'CheckSquare'
+    'Lightbulb', 'Layers', 'PenTool', 'FileText',
+    'MessageSquare', 'Feather', 'Settings', 'Wrench', 'CheckSquare'
   ];
+
+  // Map of icon names to their components
+  const iconComponents = {
+    Compass, Map, Code, Zap, BookOpen, 
+    Lightbulb, Layers, PenTool, FileText,
+    MessageSquare, Feather, Settings, Wrench, CheckSquare
+  };
   
   const colorOptions = [
     colors.terracotta,
@@ -84,6 +106,10 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
   const validateForm = () => {
     const newErrors = {};
     
+    if (!formData.journey_id) {
+      newErrors['journey_id'] = 'Journey ID is required. Please ensure you are on a valid journey page.';
+    }
+    
     if (!formData.step_id.trim()) {
       newErrors['step_id'] = 'Step ID is required';
     } else if (!/^[a-zA-Z0-9_-]+$/.test(formData.step_id)) {
@@ -113,6 +139,33 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
       onSubmit(formData);
     }
   };
+  
+  // If journey ID is missing, show an error message
+  if (!formData.journey_id) {
+    return (
+      <div className="bg-white rounded-lg shadow-card p-6">
+        <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <AlertTriangle size={40} className="text-red-500" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2 text-charcoal">
+            Cannot Create Step
+          </h2>
+          <p className="text-darkBrown mb-6">
+            A journey must be selected before creating a step. Please ensure you are on a valid journey page.
+          </p>
+          <Button 
+            type="button"
+            variant="secondary"
+            onClick={onCancel}
+            className="w-full"
+          >
+            Close
+          </Button>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-card p-6">
@@ -179,7 +232,7 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
           </label>
           <div className="grid grid-cols-5 gap-2 max-h-40 overflow-y-auto border border-beige rounded-lg p-2">
             {iconOptions.map(icon => {
-              const IconComponent = LucideIcons[icon];
+              const IconComponent = iconComponents[icon];
               return (
                 <button
                   key={icon}
@@ -220,7 +273,7 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
                 onClick={() => handleColorSelect(color)}
               >
                 {formData.color === color && (
-                  <LucideIcons.Check size={20} color="white" />
+                  <Check size={20} color="white" />
                 )}
               </button>
             ))}

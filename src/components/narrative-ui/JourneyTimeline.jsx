@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useJourneyStore } from '../../hooks/useJourneyStore';
 import { colors } from '../../constants/colors';
 import * as LucideIcons from 'lucide-react';
@@ -6,11 +6,25 @@ import * as LucideIcons from 'lucide-react';
 const JourneyTimeline = () => {
   const { steps, currentStepIndex, goToStep } = useJourneyStore();
   
+  // Effect to ensure there's a selected step if steps exist
+  useEffect(() => {
+    // If we have steps but no currentStep is selected (or invalid index), select the first one
+    if (steps.length > 0 && (currentStepIndex < 0 || currentStepIndex >= steps.length)) {
+      console.log("Timeline detected invalid currentStepIndex, resetting to 0");
+      goToStep(0);
+    }
+  }, [steps, currentStepIndex, goToStep]);
+  
   // Dynamic icon rendering from string name
   const renderIcon = (iconName) => {
     const Icon = LucideIcons[iconName] || LucideIcons.Circle;
     return <Icon size={24} />;
   };
+  
+  // If no steps, don't render the timeline
+  if (steps.length === 0) {
+    return null;
+  }
   
   return (
     <div className="mb-10 relative px-12">
@@ -37,7 +51,15 @@ const JourneyTimeline = () => {
                   transform: isActive ? 'scale(1.1)' : 'scale(1)',
                   border: isActive ? `4px solid ${colors.offWhite}` : 'none'
                 }}
-                onClick={() => goToStep(index)}
+                onClick={() => {
+                  console.log(`Timeline: clicking on step at index ${index}, step:`, step.title);
+                  
+                  // First set currentStepIndex directly in the store
+                  useJourneyStore.setState({ currentStepIndex: index });
+                  
+                  // Then call goToStep as a backup
+                  goToStep(index);
+                }}
                 aria-label={`Go to ${step.title} stage`}
               >
                 <div className="text-white">

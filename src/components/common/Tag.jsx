@@ -1,9 +1,11 @@
 import React from 'react';
+import { colors } from '../../constants/colors';
 
 const Tag = ({ label, onRemove, className = '' }) => {
   return (
     <span 
-      className={`px-2 py-1 bg-offWhite text-darkBrown text-xs rounded-full inline-flex items-center ${className}`}
+      className={`px-2 py-1 text-darkBrown text-xs rounded-full inline-flex items-center ${className}`}
+      style={{ backgroundColor: colors.offWhite }}
     >
       {label}
       {onRemove && (
