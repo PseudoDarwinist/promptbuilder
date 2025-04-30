@@ -1,37 +1,62 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'prompt-journey-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // Initialize the database
 const dbPromise = openDB(DB_NAME, DB_VERSION, {
-  upgrade(db) {
-    // Create stores for our tables
-    if (!db.objectStoreNames.contains('journeys')) {
-      const journeyStore = db.createObjectStore('journeys', { keyPath: 'id', autoIncrement: true });
-      journeyStore.createIndex('created_at', 'created_at');
-    }
+  upgrade(db, oldVersion, newVersion, transaction) {
+    console.log(`Upgrading DB from version ${oldVersion} to ${newVersion}`);
     
-    if (!db.objectStoreNames.contains('steps')) {
-      const stepStore = db.createObjectStore('steps', { keyPath: 'id', autoIncrement: true });
-      stepStore.createIndex('journey_id', 'journey_id');
-      stepStore.createIndex('position', 'position');
-    }
-    
-    if (!db.objectStoreNames.contains('prompts')) {
-      const promptStore = db.createObjectStore('prompts', { keyPath: 'id', autoIncrement: true });
-      promptStore.createIndex('step_id', 'step_id');
-    }
-    
-    if (!db.objectStoreNames.contains('tags')) {
-      const tagStore = db.createObjectStore('tags', { keyPath: 'id', autoIncrement: true });
-      tagStore.createIndex('name', 'name', { unique: true });
-    }
-    
-    if (!db.objectStoreNames.contains('prompt_tags')) {
-      const promptTagStore = db.createObjectStore('prompt_tags', { keyPath: ['prompt_id', 'tag_id'] });
-      promptTagStore.createIndex('prompt_id', 'prompt_id');
-      promptTagStore.createIndex('tag_id', 'tag_id');
+    // Apply schema based on the oldVersion
+    switch (oldVersion) {
+      case 0: // Initial setup or coming from version 0
+        console.log('Applying schema version 1 (Initial setup)...');
+        if (!db.objectStoreNames.contains('journeys')) {
+          const journeyStore = db.createObjectStore('journeys', { keyPath: 'id', autoIncrement: true });
+          journeyStore.createIndex('created_at', 'created_at');
+        }
+        if (!db.objectStoreNames.contains('steps')) {
+          const stepStore = db.createObjectStore('steps', { keyPath: 'id', autoIncrement: true });
+          stepStore.createIndex('journey_id', 'journey_id');
+          stepStore.createIndex('position', 'position');
+        }
+        if (!db.objectStoreNames.contains('prompts')) {
+          const promptStore = db.createObjectStore('prompts', { keyPath: 'id', autoIncrement: true });
+          promptStore.createIndex('step_id', 'step_id');
+        }
+        if (!db.objectStoreNames.contains('tags')) {
+          const tagStore = db.createObjectStore('tags', { keyPath: 'id', autoIncrement: true });
+          tagStore.createIndex('name', 'name', { unique: true });
+        }
+        if (!db.objectStoreNames.contains('prompt_tags')) {
+          const promptTagStore = db.createObjectStore('prompt_tags', { keyPath: ['prompt_id', 'tag_id'] });
+          promptTagStore.createIndex('prompt_id', 'prompt_id');
+          promptTagStore.createIndex('tag_id', 'tag_id');
+        }
+        // Fall through to apply version 2 changes immediately after version 1
+      case 1: // Upgrading from version 1
+        console.log('Applying schema version 2 (adding sharing fields)...');
+        if (db.objectStoreNames.contains('journeys')) {
+          const journeyStore = transaction.objectStore('journeys');
+          if (!journeyStore.indexNames.contains('is_shared')) {
+            journeyStore.createIndex('is_shared', 'is_shared');
+          }
+          if (!journeyStore.indexNames.contains('share_id')) {
+            journeyStore.createIndex('share_id', 'share_id', { unique: true });
+          }
+          console.log('Indices for is_shared and share_id ensured.');
+        } else {
+          console.error('Could not find journeys store during upgrade to v2!');
+        }
+        // Add breaks or fall-through for future versions
+        break; // Break needed if we add version 3 later
+      // case 2: 
+      //   console.log('Applying schema version 3...');
+      //   // ... changes for v3 ... 
+      //   break;
+      default:
+        console.warn(`Unknown oldVersion (${oldVersion}) during upgrade.`);
     }
   }
 });
@@ -52,14 +77,18 @@ const dbService = {
   async get(query, params = []) {
     try {
       const db = await getDB();
-      
-      // Normalize query by removing whitespace and newlines
       const normalizedQuery = query.replace(/\s+/g, ' ').trim();
+      console.log(`[DB Service - get] Checking normalized query: "${normalizedQuery}"`);
       
-      // Simple query parsing
-      if (normalizedQuery.includes('SELECT * FROM journeys WHERE id = ?')) {
+      // Handle journey fetch by ID
+      if (normalizedQuery.includes('FROM journeys WHERE id = ?')) {
         const id = params[0];
-        return await db.get('journeys', id);
+        console.log(`[DB Service - get] Matched journey fetch by ID: ${id}`);
+        // db.get fetches the whole object, including any new columns like is_shared, share_id
+        const journey = await db.get('journeys', id);
+        // Add is_shared and share_id defaults if they don't exist (for older records before migration)
+        // Though migration should handle this, belt-and-suspenders approach:
+        return journey ? { is_shared: 0, share_id: null, ...journey } : null;
       }
       
       if (normalizedQuery.includes('SELECT * FROM steps WHERE id = ?')) {
@@ -118,6 +147,24 @@ const dbService = {
         const count = await index.count(journeyId);
         await tx.done;
         return { stepCount: count };
+      }
+      
+      // Handle journey fetch by share_id (Simplified Check)
+      if (normalizedQuery.includes('FROM journeys WHERE share_id = ?') && normalizedQuery.includes('AND is_shared = 1')) {
+        const shareId = params[0];
+        console.log(`[DB Service - get] Matched journey fetch by share_id: ${shareId}`);
+        const tx = db.transaction('journeys', 'readonly');
+        const index = tx.store.index('share_id');
+        const journey = await index.get(shareId);
+        await tx.done;
+        
+        if (journey && journey.is_shared === 1) {
+          console.log('[DB Service - get] Found shared journey:', journey);
+          return { is_shared: 1, share_id: journey.share_id, ...journey };
+        } else {
+          console.warn(`[DB Service - get] Journey with share_id ${shareId} not found or not shared (is_shared=${journey?.is_shared}).`);
+          return null;
+        }
       }
       
       console.warn('Unhandled get query:', query, params);
@@ -485,6 +532,96 @@ const dbService = {
         return { changes: promptTags.length };
       }
       
+      // Handle Enable Sharing Update (Revised)
+      if (normalizedQuery.startsWith('UPDATE journeys SET is_shared = 1') && normalizedQuery.includes('WHERE id = ?')) {
+        const [shareId, idParam] = params; // Get ID parameter
+        console.log(`[DB Service - run] Raw ID param for enable sharing: ${idParam} (type: ${typeof idParam})`);
+        const id = parseInt(idParam, 10); // Explicitly parse as integer
+        
+        if (isNaN(id)) { // Check if parsing failed or input was invalid
+          console.error('[DB Service - run] Invalid Journey ID for enabling sharing:', idParam);
+          // Avoid transaction errors by not proceeding
+          // Since we haven't started the tx yet, just return
+          return { changes: 0 };
+        }
+        
+        console.log(`[DB Service - run] Parsed ID for store.get: ${id} (type: ${typeof id})`);
+        const tx = db.transaction('journeys', 'readwrite');
+        const store = tx.objectStore('journeys');
+        
+        try {
+          console.log(`[DB Service - run] Attempting store.get with ID: ${id} (type: ${typeof id})`);
+          const journey = await store.get(id); // Use parsed ID
+          if (journey) {
+            const updatedJourney = {
+              id: journey.id, // Keep original ID
+              name: journey.name, // Keep original name
+              description: journey.description, // Keep original description
+              icon: journey.icon, // Keep original icon
+              created_at: journey.created_at, // Keep original creation date
+              is_shared: 1, // Update sharing status
+              share_id: shareId, // Update share ID
+              updated_at: new Date().toISOString() // Update modification date
+            };
+            console.log('[DB Service - run] Object to PUT (Enable Sharing):', updatedJourney);
+            await store.put(updatedJourney);
+            console.log(`[DB Service - run] Updated journey ${id} for enabling sharing.`);
+          } else {
+            console.warn(`[DB Service - run] Journey ${id} not found for enabling sharing.`);
+          }
+          await tx.done;
+          return { changes: journey ? 1 : 0 };
+        } catch (getPutError) {
+          console.error('[DB Service - run] Error during get/put in enable sharing:', getPutError);
+          await tx.done; // Ensure transaction completes even on error
+          throw getPutError; // Re-throw error to be caught higher up
+        }
+      }
+      
+      // Handle Disable Sharing Update (Revised)
+      if (normalizedQuery.startsWith('UPDATE journeys SET is_shared = 0') && normalizedQuery.includes('WHERE id = ?')) {
+        const [idParam] = params; // Get ID parameter
+        console.log(`[DB Service - run] Raw ID param for disable sharing: ${idParam} (type: ${typeof idParam})`);
+        const id = parseInt(idParam, 10); // Explicitly parse as integer
+        
+        if (isNaN(id)) { // Check if parsing failed
+          console.error('[DB Service - run] Invalid Journey ID for disabling sharing:', idParam);
+          return { changes: 0 };
+        }
+        
+        console.log(`[DB Service - run] Parsed ID for store.get: ${id} (type: ${typeof id})`);
+        const tx = db.transaction('journeys', 'readwrite');
+        const store = tx.objectStore('journeys');
+        
+        try {
+          console.log(`[DB Service - run] Attempting store.get with ID: ${id} (type: ${typeof id})`);
+          const journey = await store.get(id); // Use parsed ID
+          if (journey) {
+            const updatedJourney = {
+              id: journey.id,
+              name: journey.name,
+              description: journey.description,
+              icon: journey.icon,
+              created_at: journey.created_at,
+              is_shared: 0, // Update sharing status
+              share_id: null, // Clear share ID
+              updated_at: new Date().toISOString() // Update modification date
+            };
+            console.log('[DB Service - run] Object to PUT (Disable Sharing):', updatedJourney);
+            await store.put(updatedJourney);
+            console.log(`[DB Service - run] Disabled sharing for journey ${id}.`);
+          } else {
+            console.warn(`[DB Service - run] Journey ${id} not found for disabling sharing.`);
+          }
+          await tx.done;
+          return { changes: journey ? 1 : 0 };
+        } catch (getPutError) {
+          console.error('[DB Service - run] Error during get/put in disable sharing:', getPutError);
+          await tx.done;
+          throw getPutError;
+        }
+      }
+      
       console.warn('Unhandled run query:', query, params);
       return { changes: 0 };
     } catch (error) {
@@ -522,6 +659,41 @@ const dbService = {
     } catch (error) {
       console.error('Error in exec query:', query, error);
       throw error;
+    }
+  },
+
+  // --- NEW: Dedicated function for updating sharing status ---
+  async setJourneySharing(id, isShared, shareId = null) {
+    const db = await getDB();
+    const tx = db.transaction('journeys', 'readwrite');
+    const store = tx.objectStore('journeys');
+    console.log(`[DB Service - setJourneySharing] Updating ID: ${id}, isShared: ${isShared}, shareId: ${shareId}`);
+    
+    try {
+      const journey = await store.get(id);
+      if (!journey) {
+        console.warn(`[DB Service - setJourneySharing] Journey ${id} not found.`);
+        await tx.done; // Ensure transaction completes
+        return { changes: 0 };
+      }
+      
+      const updatedJourney = {
+        ...journey, // Keep existing fields
+        is_shared: isShared ? 1 : 0, // Set new status
+        share_id: isShared ? shareId : null, // Set or clear shareId
+        updated_at: new Date().toISOString() // Update timestamp
+      };
+      
+      console.log('[DB Service - setJourneySharing] Putting updated journey:', updatedJourney);
+      await store.put(updatedJourney);
+      await tx.done;
+      console.log('[DB Service - setJourneySharing] Update successful.');
+      return { changes: 1 };
+    } catch (error) {
+      console.error('[DB Service - setJourneySharing] Error during transaction:', error);
+      // Attempt to complete the transaction even on error
+      try { await tx.done; } catch (txError) { console.error('Error completing transaction after error:', txError); }
+      throw error; // Re-throw the original error
     }
   }
 };

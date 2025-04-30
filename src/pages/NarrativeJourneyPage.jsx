@@ -11,6 +11,7 @@ import { useJourneyStore } from '../hooks/useJourneyStore';
 import Spinner from '../components/common/Spinner';
 import { Plus, Settings, Trash, AlertTriangle } from 'lucide-react';
 import { colors } from '../constants/colors';
+import ShareJourneyModal from '../components/common/ShareJourneyModal';
 
 const NarrativeJourneyPage = () => {
   const { journeyId } = useParams();
@@ -22,7 +23,6 @@ const NarrativeJourneyPage = () => {
     loading, 
     error,
     loadJourney, 
-    loadSteps,
     createStep,
     updateStep,
     deleteStep 
@@ -32,6 +32,7 @@ const NarrativeJourneyPage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [stepToEdit, setStepToEdit] = useState(null);
   const [stepToDelete, setStepToDelete] = useState(null);
   
@@ -47,13 +48,6 @@ const NarrativeJourneyPage = () => {
     }
   }, [numericJourneyId, loadJourney]);
   
-  useEffect(() => {
-    if (currentJourney?.id) {
-      console.log(`NarrativeJourneyPage: useEffect detected currentJourney ID ${currentJourney.id}, calling loadSteps.`);
-      loadSteps(currentJourney.id); // Just call loadSteps, the store handles the index now
-    }
-  }, [currentJourney?.id, loadSteps]);
-  
   const handleCreateStep = async (stepData) => {
     try {
       console.log('Creating step with data:', stepData);
@@ -64,7 +58,7 @@ const NarrativeJourneyPage = () => {
       
       // If the step isn't in the array yet, we'll need to reload steps
       if (newStepIndex === -1) {
-        await loadSteps(currentJourney.id);
+        await loadJourney(currentJourney.id);
         // After reloading, the new step should be the last one
         useJourneyStore.setState({ currentStepIndex: steps.length });
       } else {
@@ -111,6 +105,10 @@ const NarrativeJourneyPage = () => {
     setShowDeleteModal(true);
   };
   
+  const handleOpenShareModal = () => {
+    setShowShareModal(true);
+  };
+  
   if (loading && !currentStep) {
     return (
       <NarrativeLayout>
@@ -141,7 +139,7 @@ const NarrativeJourneyPage = () => {
   }
   
   return (
-    <NarrativeLayout>
+    <NarrativeLayout onOpenShareModal={handleOpenShareModal}>
       {/* Header with journey info */}
       <div className="mb-8">
         <div className="flex justify-between items-center mb-4">
@@ -328,6 +326,12 @@ const NarrativeJourneyPage = () => {
           </div>
         </div>
       </Modal>
+      
+      {/* --- Share Journey Modal --- */}
+      <ShareJourneyModal 
+        isOpen={showShareModal} 
+        onClose={() => setShowShareModal(false)} 
+      />
     </NarrativeLayout>
   );
 };

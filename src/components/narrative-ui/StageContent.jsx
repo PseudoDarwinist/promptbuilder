@@ -28,6 +28,9 @@ const StageContent = () => {
     return null;
   }, [steps, currentStepIndex]);
   
+  // Log the fully derived step object received by the component (fixed backslashes)
+  console.log('[StageContent Render] Derived currentStep object with full details:', JSON.stringify(currentStep, null, 2)); 
+
   // Log values received from the hook/derived at the start of render
   console.log(`[StageContent Render] steps.length=${steps.length}, currentStepIndex=${currentStepIndex}`);
   console.log(`[StageContent Render] Derived currentStep object: ${currentStep ? currentStep.title : 'null'}`);

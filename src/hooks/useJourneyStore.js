@@ -37,14 +37,25 @@ export const useJourneyStore = create(
     
     loadJourney: async (journeyId) => {
       try {
-        set({ loading: true, error: null });
+        set({ loading: true, error: null, currentJourney: null, steps: [], currentStepIndex: -1 });
+        console.log(`[Store] Loading journey ID: ${journeyId}`);
         const journey = await journeyService.getJourneyWithSteps(journeyId);
-        set({ currentJourney: journey, loading: false });
-        
-        // Load steps with prompts
-        await get().loadSteps(journeyId);
+        if (journey) {
+          console.log(`[Store] Journey ${journeyId} loaded:`, journey);
+          set({
+            currentJourney: journey,
+            steps: journey.steps || [],
+            currentStepIndex: (journey.steps && journey.steps.length > 0) ? 0 : -1,
+            loading: false
+          });
+          // Add log to inspect the state immediately after setting (fixed backslashes)
+          console.log('[Store] State after setting currentJourney:', JSON.stringify(get().currentJourney, null, 2)); 
+        } else {
+          console.warn(`[Store] Journey ${journeyId} not found or failed to load.`);
+          set({ error: 'Journey not found', loading: false });
+        }
       } catch (error) {
-        console.error("Error loading journey:", error);
+        console.error("Error loading journey in store:", error);
         set({ error: error.message, loading: false });
       }
     },
@@ -108,50 +119,83 @@ export const useJourneyStore = create(
       }
     },
     
-    // Step actions
-    loadSteps: async (journeyId) => {
+    // --- Sharing Actions (Refactored) ---
+    enableSharing: async () => {
+      const { currentJourney } = get();
+      if (!currentJourney) return;
+
+      try {
+        set({ loading: true });
+        // Directly call the service function
+        console.log(`[Store] Calling journeyService.enableSharing for ID: ${currentJourney.id}`);
+        const data = await journeyService.enableSharing(currentJourney.id);
+        console.log('[Store] enableSharing service call returned:', data);
+        
+        set(state => {
+          if (state.currentJourney?.id === data.journeyId) {
+            state.currentJourney.is_shared = data.is_shared;
+            state.currentJourney.share_id = data.share_id;
+          }
+          state.loading = false;
+        });
+        return data;
+      } catch (error) {
+        console.error("Error enabling sharing in store:", error);
+        set({ error: error.message, loading: false });
+        throw error;
+      }
+    },
+
+    disableSharing: async () => {
+      const { currentJourney } = get();
+      if (!currentJourney) return;
+
+      try {
+        set({ loading: true });
+        // Directly call the service function
+        console.log(`[Store] Calling journeyService.disableSharing for ID: ${currentJourney.id}`);
+        const data = await journeyService.disableSharing(currentJourney.id);
+        console.log('[Store] disableSharing service call returned:', data);
+        
+        set(state => {
+          if (state.currentJourney?.id === data.journeyId) {
+            state.currentJourney.is_shared = data.is_shared;
+            state.currentJourney.share_id = null; // Explicitly set to null
+          }
+          state.loading = false;
+        });
+        return data;
+      } catch (error) {
+        console.error("Error disabling sharing in store:", error);
+        set({ error: error.message, loading: false });
+        throw error;
+      }
+    },
+
+    // --- Load Shared Journey (Refactored) ---
+    loadSharedJourney: async (shareId) => {
       try {
         set({ loading: true, error: null });
-        const steps = await stepService.getStepsWithPrompts(journeyId);
-        
-        console.log(`Loaded ${steps.length} steps for journey ${journeyId} from service.`);
-        
-        // Ensure each step has at least an empty prompt object
-        const stepsWithPrompts = steps.map(step => {
-          if (!step.prompt) {
-            console.log(`Step ${step.id} is missing prompt, initializing.`);
-            return {
-              ...step,
-              prompt: { content: "", tags: [] }
-            };
-          }
-          return step;
-        });
-        
-        // Set steps and RESET currentStepIndex to 0, ensure loading is false
-        set({ 
-          steps: stepsWithPrompts,
-          currentStepIndex: stepsWithPrompts.length > 0 ? 0 : -1,
-          loading: false,
-          error: null
-        });
+        // Directly call the service function
+        console.log(`[Store] Calling journeyService.getJourneyByShareId with shareId: ${shareId}`);
+        const sharedJourneyData = await journeyService.getJourneyByShareId(shareId);
+        console.log('[Store] getJourneyByShareId service call returned:', sharedJourneyData);
 
-        console.log(`[Store Action] loadSteps finished set() call. Index set to: ${stepsWithPrompts.length > 0 ? 0 : -1}`);
-
-        // Log state IMMEDIATELY after setting using get()
-        const postUpdateState = get();
-        console.log(`[Store Action] State immediately after set: index=${postUpdateState.currentStepIndex}, steps=${postUpdateState.steps.length}`);
-        const postUpdateStep = postUpdateState.currentStep; // Explicitly call getter
-        console.log(`[Store Action] currentStep from getter post-set: ${postUpdateStep ? postUpdateStep.title : 'null'}`);
-
-        return stepsWithPrompts;
+        set({ loading: false }); // Clear loading
+        
+        if (!sharedJourneyData) {
+          throw new Error('Shared journey not found or not available.');
+        }
+        
+        return sharedJourneyData; // Return data for the page to use
       } catch (error) {
-        console.error("Error loading steps in store:", error);
-        set({ error: error.message, loading: false, steps: [], currentStepIndex: -1 });
-        return [];
+        console.error("Error loading shared journey in store:", error);
+        set({ error: error.message, loading: false });
+        return null; // Return null on error
       }
     },
     
+    // Step actions
     goToStep: (index) => {
       const { steps } = get(); // Get current steps for validation
       
