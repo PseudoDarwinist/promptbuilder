@@ -72,7 +72,7 @@ const NarrativeJourneyPage = () => {
         useJourneyStore.setState({ currentStepIndex: newStepIndex });
       }
       
-      setShowCreateModal(false);
+    setShowCreateModal(false);
     } catch (error) {
       console.error('Error creating step:', error);
       alert(`Failed to create step: ${error.message}`);
@@ -81,9 +81,9 @@ const NarrativeJourneyPage = () => {
   
   const handleUpdateStep = async (stepData) => {
     try {
-      await updateStep(stepToEdit.id, stepData);
-      setShowEditModal(false);
-      setStepToEdit(null);
+    await updateStep(stepToEdit.id, stepData);
+    setShowEditModal(false);
+    setStepToEdit(null);
     } catch (error) {
       console.error('Error updating step:', error);
       alert(`Failed to update step: ${error.message}`);
@@ -92,9 +92,9 @@ const NarrativeJourneyPage = () => {
   
   const handleDeleteStep = async () => {
     try {
-      await deleteStep(stepToDelete.id);
-      setShowDeleteModal(false);
-      setStepToDelete(null);
+    await deleteStep(stepToDelete.id);
+    setShowDeleteModal(false);
+    setStepToDelete(null);
     } catch (error) {
       console.error('Error deleting step:', error);
       alert(`Failed to delete step: ${error.message}`);
@@ -149,24 +149,24 @@ const NarrativeJourneyPage = () => {
             {currentStep?.title || "Welcome to your journey"}
           </h2>
           {currentJourney && (
-            <div className="flex items-center space-x-3">
-              <Button 
-                variant="secondary"
-                icon={<Settings size={16} />}
-                onClick={() => setShowManageModal(true)}
-              >
-                Manage Steps
-              </Button>
-              <Button 
-                variant="primary"
-                icon={<Plus size={16} />}
-                style={{ backgroundColor: colors.sage }}
-                onClick={() => setShowCreateModal(true)}
+          <div className="flex items-center space-x-3">
+            <Button 
+              variant="secondary"
+              icon={<Settings size={16} />}
+              onClick={() => setShowManageModal(true)}
+            >
+              Manage Steps
+            </Button>
+            <Button 
+              variant="primary"
+              icon={<Plus size={16} />}
+              style={{ backgroundColor: colors.sage }}
+              onClick={() => setShowCreateModal(true)}
                 disabled={!currentJourney?.id}
-              >
-                Add Step
-              </Button>
-            </div>
+            >
+              Add Step
+            </Button>
+          </div>
           )}
         </div>
         

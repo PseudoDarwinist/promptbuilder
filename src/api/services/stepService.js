@@ -4,29 +4,29 @@ export const stepService = {
   // Get a step with its prompt
   async getStepWithPrompt(stepId) {
     try {
-      // Get step
+    // Get step
       const step = await dbService.get('SELECT * FROM steps WHERE id = ?', [stepId]);
-      
-      if (!step) {
-        throw new Error(`Step with ID ${stepId} not found`);
-      }
-      
-      // Get prompt for step
+    
+    if (!step) {
+      throw new Error(`Step with ID ${stepId} not found`);
+    }
+    
+    // Get prompt for step
       const prompt = await dbService.get('SELECT * FROM prompts WHERE step_id = ?', [step.id]);
-      
+    
       // Get tags for prompt if available
-      let tags = [];
-      if (prompt) {
+    let tags = [];
+    if (prompt) {
         tags = await dbService.all(`
-          SELECT t.id, t.name 
-          FROM tags t
-          JOIN prompt_tags pt ON t.id = pt.tag_id
-          WHERE pt.prompt_id = ?
+        SELECT t.id, t.name 
+        FROM tags t
+        JOIN prompt_tags pt ON t.id = pt.tag_id
+        WHERE pt.prompt_id = ?
         `, [prompt.id]);
-      }
+    }
       
       console.log(`Retrieved step ${stepId} with prompt:`, prompt ? `ID ${prompt.id}` : 'no prompt');
-      
+    
       return { ...step, prompt: prompt ? { ...prompt, tags } : null };
     } catch (error) {
       console.error(`Error fetching step with ID ${stepId}:`, error);
@@ -39,23 +39,23 @@ export const stepService = {
     try {
       // Get steps for journey
       const steps = await dbService.all(
-        'SELECT * FROM steps WHERE journey_id = ? ORDER BY position ASC',
+      'SELECT * FROM steps WHERE journey_id = ? ORDER BY position ASC',
         [journeyId]
-      );
-      
+    );
+    
       console.log(`Retrieved ${steps.length} steps for journey ${journeyId}`);
       
       // For each step, get its prompt and tags
       const stepsWithPrompts = await Promise.all(steps.map(async (step) => {
         const prompt = await dbService.get('SELECT * FROM prompts WHERE step_id = ?', [step.id]);
         
-        let tags = [];
-        if (prompt) {
+      let tags = [];
+      if (prompt) {
           tags = await dbService.all(`
-            SELECT t.id, t.name 
-            FROM tags t
-            JOIN prompt_tags pt ON t.id = pt.tag_id
-            WHERE pt.prompt_id = ?
+          SELECT t.id, t.name 
+          FROM tags t
+          JOIN prompt_tags pt ON t.id = pt.tag_id
+          WHERE pt.prompt_id = ?
           `, [prompt.id]);
         }
         
@@ -85,28 +85,28 @@ export const stepService = {
       }
       
       console.log('Creating step with data:', JSON.stringify(stepData, null, 2));
-      
+    
       // Get current max position for the journey
       const result = await dbService.get(
-        'SELECT MAX(position) as maxPos FROM steps WHERE journey_id = ?',
+      'SELECT MAX(position) as maxPos FROM steps WHERE journey_id = ?',
         [stepData.journey_id]
-      );
+    );
       const position = result && result.maxPos !== null ? result.maxPos + 1 : 0;
-      
-      // Insert step
+    
+    // Insert step
       const stepResult = await dbService.run(
         'INSERT INTO steps (journey_id, step_id, title, description, icon, color, position) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [
-          stepData.journey_id,
-          stepData.step_id,
-          stepData.title,
+      [
+        stepData.journey_id,
+        stepData.step_id,
+        stepData.title,
           stepData.description || '',
           stepData.icon || 'Compass',
           stepData.color || '#5B8FB9',
-          position
-        ]
-      );
-      
+        position
+      ]
+    );
+    
       const stepId = stepResult.lastID;
       console.log(`Created step with ID ${stepId}`);
       
@@ -115,38 +115,38 @@ export const stepService = {
         console.log(`Adding prompt for step ${stepId} with content:`, stepData.prompt.content.substring(0, 50) + '...');
         
         const promptResult = await dbService.run(
-          'INSERT INTO prompts (step_id, content) VALUES (?, ?)',
+        'INSERT INTO prompts (step_id, content) VALUES (?, ?)',
           [stepId, stepData.prompt.content]
-        );
-        
+      );
+      
         const promptId = promptResult.lastID;
         console.log(`Created prompt with ID ${promptId}`);
         
         // Insert tags if available
-        if (stepData.prompt.tags && stepData.prompt.tags.length > 0) {
+      if (stepData.prompt.tags && stepData.prompt.tags.length > 0) {
           console.log(`Adding ${stepData.prompt.tags.length} tags for prompt ${promptId}`);
           
-          for (const tagName of stepData.prompt.tags) {
-            // Check if tag exists
+        for (const tagName of stepData.prompt.tags) {
+          // Check if tag exists
             let tag = await dbService.get('SELECT id FROM tags WHERE name = ?', [tagName]);
-            
-            // If tag doesn't exist, create it
-            if (!tag) {
+          
+          // If tag doesn't exist, create it
+          if (!tag) {
               const tagResult = await dbService.run('INSERT INTO tags (name) VALUES (?)', [tagName]);
-              tag = { id: tagResult.lastID };
+            tag = { id: tagResult.lastID };
               console.log(`Created new tag "${tagName}" with ID ${tag.id}`);
             } else {
               console.log(`Using existing tag "${tagName}" with ID ${tag.id}`);
-            }
-            
-            // Associate tag with prompt
+          }
+          
+          // Associate tag with prompt
             await dbService.run(
-              'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
+            'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
               [promptId, tag.id]
             );
             console.log(`Associated tag ${tag.id} with prompt ${promptId}`);
-          }
         }
+      }
       } else {
         console.log(`No prompt content provided for step ${stepId}`);
       }
@@ -173,98 +173,98 @@ export const stepService = {
       }
       
       console.log(`Updating step ${stepId} with data:`, JSON.stringify(stepData, null, 2));
-      
-      // Update step
+    
+    // Update step
       await dbService.run(
         'UPDATE steps SET title = ?, description = ?, icon = ?, color = ? WHERE id = ?',
-        [
-          stepData.title,
+      [
+        stepData.title,
           stepData.description || '',
           stepData.icon || 'Compass',
           stepData.color || '#5B8FB9',
-          stepId
-        ]
-      );
-      
+        stepId
+      ]
+    );
+    
       // Update prompt if available
-      if (stepData.prompt) {
+    if (stepData.prompt) {
         // Check if prompt exists
         const prompt = await dbService.get('SELECT id FROM prompts WHERE step_id = ?', [stepId]);
-        
-        if (prompt) {
+      
+      if (prompt) {
           console.log(`Updating existing prompt ${prompt.id} for step ${stepId}`);
           
-          // Update existing prompt
+        // Update existing prompt
           await dbService.run(
-            'UPDATE prompts SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-            [stepData.prompt.content, prompt.id]
-          );
-          
+          'UPDATE prompts SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          [stepData.prompt.content, prompt.id]
+        );
+        
           // Update tags if available
-          if (stepData.prompt.tags) {
+        if (stepData.prompt.tags) {
             console.log(`Updating tags for prompt ${prompt.id}`);
             
-            // Remove existing tag associations
+          // Remove existing tag associations
             await dbService.run('DELETE FROM prompt_tags WHERE prompt_id = ?', [prompt.id]);
-            
-            // Add new tag associations
-            for (const tagName of stepData.prompt.tags) {
-              // Check if tag exists
+          
+          // Add new tag associations
+          for (const tagName of stepData.prompt.tags) {
+            // Check if tag exists
               let tag = await dbService.get('SELECT id FROM tags WHERE name = ?', [tagName]);
-              
-              // If tag doesn't exist, create it
-              if (!tag) {
+            
+            // If tag doesn't exist, create it
+            if (!tag) {
                 const tagResult = await dbService.run('INSERT INTO tags (name) VALUES (?)', [tagName]);
-                tag = { id: tagResult.lastID };
+              tag = { id: tagResult.lastID };
                 console.log(`Created new tag "${tagName}" with ID ${tag.id}`);
-              }
-              
-              // Associate tag with prompt
-              await dbService.run(
-                'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
-                [prompt.id, tag.id]
-              );
-              console.log(`Associated tag ${tag.id} with prompt ${prompt.id}`);
             }
+            
+            // Associate tag with prompt
+              await dbService.run(
+              'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
+              [prompt.id, tag.id]
+            );
+              console.log(`Associated tag ${tag.id} with prompt ${prompt.id}`);
           }
-        } else {
+        }
+      } else {
           console.log(`Creating new prompt for step ${stepId}`);
           
-          // Create new prompt
+        // Create new prompt
           const promptResult = await dbService.run(
-            'INSERT INTO prompts (step_id, content) VALUES (?, ?)',
-            [stepId, stepData.prompt.content]
-          );
-          
+          'INSERT INTO prompts (step_id, content) VALUES (?, ?)',
+          [stepId, stepData.prompt.content]
+        );
+        
           const promptId = promptResult.lastID;
           console.log(`Created new prompt with ID ${promptId}`);
           
           // Add tags if available
-          if (stepData.prompt.tags && stepData.prompt.tags.length > 0) {
+        if (stepData.prompt.tags && stepData.prompt.tags.length > 0) {
             console.log(`Adding ${stepData.prompt.tags.length} tags for prompt ${promptId}`);
             
-            for (const tagName of stepData.prompt.tags) {
-              // Check if tag exists
+          for (const tagName of stepData.prompt.tags) {
+            // Check if tag exists
               let tag = await dbService.get('SELECT id FROM tags WHERE name = ?', [tagName]);
-              
-              // If tag doesn't exist, create it
-              if (!tag) {
+            
+            // If tag doesn't exist, create it
+            if (!tag) {
                 const tagResult = await dbService.run('INSERT INTO tags (name) VALUES (?)', [tagName]);
-                tag = { id: tagResult.lastID };
+              tag = { id: tagResult.lastID };
                 console.log(`Created new tag "${tagName}" with ID ${tag.id}`);
-              }
-              
-              // Associate tag with prompt
-              await dbService.run(
-                'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
-                [promptId, tag.id]
-              );
-              console.log(`Associated tag ${tag.id} with prompt ${promptId}`);
             }
+            
+            // Associate tag with prompt
+              await dbService.run(
+              'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
+                [promptId, tag.id]
+            );
+              console.log(`Associated tag ${tag.id} with prompt ${promptId}`);
           }
         }
       }
-      
+    }
+    
       // Return the updated step with its prompt and tags
       const updatedStep = await this.getStepWithPrompt(stepId);
       console.log('Step updated successfully:', updatedStep);
@@ -283,26 +283,26 @@ export const stepService = {
       }
       
       console.log(`Deleting step ${stepId}`);
-      
+    
       // Get step to check its journey_id and position
       const step = await dbService.get('SELECT journey_id, position FROM steps WHERE id = ?', [stepId]);
-      
-      if (!step) {
-        throw new Error(`Step with ID ${stepId} not found`);
-      }
-      
+    
+    if (!step) {
+      throw new Error(`Step with ID ${stepId} not found`);
+    }
+    
       // Delete step (will cascade delete prompts and tag associations)
       await dbService.run('DELETE FROM steps WHERE id = ?', [stepId]);
       console.log(`Step ${stepId} deleted`);
-      
+    
       // Update positions of remaining steps
       await dbService.run(
-        'UPDATE steps SET position = position - 1 WHERE journey_id = ? AND position > ?',
-        [step.journey_id, step.position]
-      );
+      'UPDATE steps SET position = position - 1 WHERE journey_id = ? AND position > ?',
+      [step.journey_id, step.position]
+    );
       console.log(`Updated positions for steps in journey ${step.journey_id}`);
-      
-      return { id: stepId, deleted: true };
+    
+    return { id: stepId, deleted: true };
     } catch (error) {
       console.error(`Error deleting step with ID ${stepId}:`, error);
       throw error;

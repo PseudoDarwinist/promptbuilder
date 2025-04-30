@@ -129,7 +129,7 @@ export const useJourneyStore = create(
         });
         
         // Set steps and RESET currentStepIndex to 0, ensure loading is false
-        set({
+        set({ 
           steps: stepsWithPrompts,
           currentStepIndex: stepsWithPrompts.length > 0 ? 0 : -1,
           loading: false,

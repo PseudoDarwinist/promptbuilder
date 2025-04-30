@@ -5,11 +5,11 @@ import NarrativeJourneyPage from '../pages/NarrativeJourneyPage';
 
 const AppRoutes = () => {
   return (
-    <Routes>
-      <Route path="/" element={<JourneysListPage />} />
-      <Route path="/journey/:journeyId" element={<NarrativeJourneyPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      <Routes>
+        <Route path="/" element={<JourneysListPage />} />
+        <Route path="/journey/:journeyId" element={<NarrativeJourneyPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
   );
 };
 

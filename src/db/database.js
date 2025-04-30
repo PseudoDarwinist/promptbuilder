@@ -4,16 +4,16 @@ import dbService from '../api/db/database-service';
 // This is just to maintain API compatibility
 export async function runMigrations() {
   console.log('Running migrations...');
-  
+    
   // Create the migrations table (just for API compatibility)
   await dbService.exec(`
-    CREATE TABLE IF NOT EXISTS migrations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  
+      CREATE TABLE IF NOT EXISTS migrations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
   // The actual migrations are handled in the database-service.js file
   // during the IndexedDB initialization
   
@@ -27,7 +27,7 @@ export async function runMigrations() {
       'INSERT INTO journeys (name, description, icon) VALUES (?, ?, ?)',
       ['Getting Started', 'Learn how to use the app', 'BookOpen']
     );
-    
+        
     // Add some steps
     await dbService.run(
       'INSERT INTO steps (journey_id, step_id, title, description, icon, color, position) VALUES (?, ?, ?, ?, ?, ?, ?)',
