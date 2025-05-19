@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { colors } from '../../constants/colors';
 import Button from '../common/Button';
 import TagsInput from '../common/TagsInput';
+import FileUploader from '../common/FileUploader';
 import { 
   Compass, Map, Code, Zap, BookOpen, 
   Lightbulb, Layers, PenTool, FileText,
   MessageSquare, Feather, Settings, Wrench, CheckSquare,
-  Check, AlertTriangle 
+  Check, AlertTriangle, Database 
 } from 'lucide-react';
+import dbService from '../../api/db/database-service';
 
 const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
   const [formData, setFormData] = useState({
@@ -19,7 +21,8 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
     color: initialData.color || colors.terracotta,
     prompt: {
       content: initialData.prompt?.content || '',
-      tags: initialData.prompt?.tags?.map(tag => tag.name) || []
+      tags: initialData.prompt?.tags?.map(tag => tag.name) || [],
+      attachments: initialData.prompt?.attachments || []
     }
   });
   
@@ -34,6 +37,7 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
   }, [journeyId]);
   
   const [errors, setErrors] = useState({});
+  const [dbError, setDbError] = useState(null);
   
   const iconOptions = [
     'Compass', 'Map', 'Code', 'Zap', 'BookOpen', 
@@ -56,7 +60,11 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
     '#5B8FB9', // Additional blue
     '#ED7D3A', // Additional orange
     '#6E44FF', // Additional purple
-    '#5F8D4E'  // Additional green
+    '#5F8D4E',  // Additional green
+    '#FF1493', // Bright Pink (replacing Boysenberry Shadow)
+    '#DBD0A8', // Capital Grains
+    '#469BA7', // Sea Sparkle
+    '#012731'  // Daintree
   ];
   
   const availableTags = [
@@ -103,6 +111,16 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
     }));
   };
   
+  const handleAttachmentsChange = (attachments) => {
+    setFormData(prev => ({
+      ...prev,
+      prompt: {
+        ...prev.prompt,
+        attachments
+      }
+    }));
+  };
+  
   const validateForm = () => {
     const newErrors = {};
     
@@ -140,6 +158,26 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
     }
   };
   
+  const handleVerifyDatabase = async () => {
+    try {
+      setDbError('Checking database...');
+      const result = await dbService.initializeDatabase();
+      if (result.success) {
+        if (result.resetPerformed) {
+          setDbError('Database was reset successfully. Please try your operation again.');
+          setTimeout(() => setDbError(null), 3000);
+        } else {
+          setDbError('Database verified successfully.');
+          setTimeout(() => setDbError(null), 1500);
+        }
+      } else {
+        setDbError(`Database check failed: ${result.error}`);
+      }
+    } catch (error) {
+      setDbError(`Database error: ${error.message}`);
+    }
+  };
+  
   // If journey ID is missing, show an error message
   if (!formData.journey_id) {
     return (
@@ -162,6 +200,42 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
           >
             Close
           </Button>
+        </div>
+      </div>
+    );
+  }
+  
+  // If there's a database error, show it at the top of the form
+  if (dbError) {
+    return (
+      <div className="bg-white rounded-lg shadow-card p-6">
+        <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <Database size={40} className="text-amber-500" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2 text-charcoal">
+            Database Status
+          </h2>
+          <p className="text-darkBrown mb-6">
+            {dbError}
+          </p>
+          <div className="flex justify-center space-x-3">
+            <Button 
+              type="button"
+              variant="secondary"
+              onClick={onCancel}
+            >
+              Close
+            </Button>
+            <Button 
+              type="button"
+              variant="primary"
+              onClick={handleVerifyDatabase}
+              style={{ backgroundColor: colors.sage }}
+            >
+              Refresh Database
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -295,6 +369,16 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
           placeholder="Enter the prompt text here..."
         />
         {errors['prompt.content'] && <p className="text-red-500 text-xs mt-1">{errors['prompt.content']}</p>}
+      </div>
+      
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-charcoal mb-1">
+          Attachments
+        </label>
+        <FileUploader 
+          files={formData.prompt.attachments}
+          onChange={handleAttachmentsChange}
+        />
       </div>
       
       <div className="mb-6">

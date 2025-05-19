@@ -1,12 +1,15 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'prompt-journey-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 // Initialize the database
 const dbPromise = openDB(DB_NAME, DB_VERSION, {
   upgrade(db, oldVersion, newVersion, transaction) {
     console.log(`Upgrading DB from version ${oldVersion} to ${newVersion}`);
+    
+    // Check the list of object stores already created for debugging
+    console.log('Existing object stores:', Array.from(db.objectStoreNames));
     
     // Apply schema based on the oldVersion
     switch (oldVersion) {
@@ -34,8 +37,8 @@ const dbPromise = openDB(DB_NAME, DB_VERSION, {
           promptTagStore.createIndex('prompt_id', 'prompt_id');
           promptTagStore.createIndex('tag_id', 'tag_id');
         }
-        // Fall through to apply version 2 changes immediately after version 1
-      case 1: // Upgrading from version 1
+        // Do NOT break here, let it fall through to apply all upgrades
+      case 1: // Applying version 2 changes
         console.log('Applying schema version 2 (adding sharing fields)...');
         if (db.objectStoreNames.contains('journeys')) {
           const journeyStore = transaction.objectStore('journeys');
@@ -49,22 +52,63 @@ const dbPromise = openDB(DB_NAME, DB_VERSION, {
         } else {
           console.error('Could not find journeys store during upgrade to v2!');
         }
-        // Add breaks or fall-through for future versions
-        break; // Break needed if we add version 3 later
-      // case 2: 
-      //   console.log('Applying schema version 3...');
-      //   // ... changes for v3 ... 
-      //   break;
+        // Do NOT break here, let it fall through to apply version 3 changes
+      case 2: // Applying version 3 changes - Add prompt attachments
+        console.log('Applying schema version 3 (Add file attachments)...');
+        if (!db.objectStoreNames.contains('prompt_attachments')) {
+          console.log('Creating prompt_attachments object store...');
+          try {
+            const attachmentStore = db.createObjectStore('prompt_attachments', { keyPath: 'id', autoIncrement: true });
+            attachmentStore.createIndex('prompt_id', 'prompt_id');
+            console.log('Successfully created prompt_attachments store');
+          } catch (error) {
+            console.error('Error creating prompt_attachments store:', error);
+          }
+        } else {
+          console.log('prompt_attachments store already exists');
+        }
+        break;
       default:
         console.warn(`Unknown oldVersion (${oldVersion}) during upgrade.`);
     }
+    
+    // Log final state of object stores
+    console.log('Object stores after upgrade:', Array.from(db.objectStoreNames));
   }
 });
+
+// Function to force delete and recreate the database
+const forceResetDatabase = async () => {
+  return new Promise((resolve, reject) => {
+    console.log('Forcing database reset...');
+    const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
+    
+    deleteRequest.onerror = () => {
+      console.error('Error deleting database');
+      reject(new Error('Failed to delete database'));
+    };
+    
+    deleteRequest.onsuccess = () => {
+      console.log('Database successfully deleted. Will recreate on next access.');
+      resolve();
+    };
+  });
+};
 
 // Helper function to ensure DB connection
 const getDB = async () => {
   try {
-    return await dbPromise;
+    const db = await dbPromise;
+    
+    // Verify that prompt_attachments exists before any operations
+    if (!Array.from(db.objectStoreNames).includes('prompt_attachments')) {
+      console.error('prompt_attachments store is missing! Attempting to fix...');
+      await forceResetDatabase();
+      // Try to get a fresh instance
+      return await openDB(DB_NAME, DB_VERSION);
+    }
+    
+    return db;
   } catch (error) {
     console.error('Error connecting to IndexedDB:', error);
     throw new Error('Failed to connect to database');
@@ -78,24 +122,33 @@ const dbService = {
     try {
       const db = await getDB();
       const normalizedQuery = query.replace(/\s+/g, ' ').trim();
-      console.log(`[DB Service - get] Checking normalized query: "${normalizedQuery}"`);
       
       // Handle journey fetch by ID
       if (normalizedQuery.includes('FROM journeys WHERE id = ?')) {
         const id = params[0];
-        console.log(`[DB Service - get] Matched journey fetch by ID: ${id}`);
-        // db.get fetches the whole object, including any new columns like is_shared, share_id
         const journey = await db.get('journeys', id);
         // Add is_shared and share_id defaults if they don't exist (for older records before migration)
         // Though migration should handle this, belt-and-suspenders approach:
         return journey ? { is_shared: 0, share_id: null, ...journey } : null;
       }
       
+      // Handle step fetch by ID
       if (normalizedQuery.includes('SELECT * FROM steps WHERE id = ?')) {
         const id = params[0];
         return await db.get('steps', id);
       }
       
+      // *** NEW: Handle prompt fetch by ID ***
+      if (normalizedQuery.includes('SELECT * FROM prompts WHERE id = ?')) {
+        const id = params[0];
+        if (typeof id !== 'number' || isNaN(id)) {
+          console.error('[DB Service - get] Invalid prompt ID for get:', id);
+          return null;
+        }
+        return await db.get('prompts', id);
+      }
+      
+      // Handle prompt fetch by step_id
       if (normalizedQuery.includes('SELECT * FROM prompts WHERE step_id = ?')) {
         const stepId = params[0];
         const tx = db.transaction('prompts', 'readonly');
@@ -105,6 +158,7 @@ const dbService = {
         return result;
       }
       
+      // Handle prompt ID fetch by step_id
       if (normalizedQuery.includes('SELECT id FROM prompts WHERE step_id = ?')) {
         const stepId = params[0];
         const tx = db.transaction('prompts', 'readonly');
@@ -114,6 +168,7 @@ const dbService = {
         return result ? { id: result.id } : null;
       }
       
+      // Handle tag ID fetch by name
       if (normalizedQuery.includes('SELECT id FROM tags WHERE name = ?')) {
         const name = params[0];
         const tx = db.transaction('tags', 'readonly');
@@ -123,6 +178,7 @@ const dbService = {
         return result ? { id: result.id } : null;
       }
       
+      // Handle MAX(position) fetch
       if (normalizedQuery.includes('SELECT MAX(position) as maxPos FROM steps WHERE journey_id = ?')) {
         const journeyId = params[0];
         const tx = db.transaction('steps', 'readonly');
@@ -152,22 +208,34 @@ const dbService = {
       // Handle journey fetch by share_id (Simplified Check)
       if (normalizedQuery.includes('FROM journeys WHERE share_id = ?') && normalizedQuery.includes('AND is_shared = 1')) {
         const shareId = params[0];
-        console.log(`[DB Service - get] Matched journey fetch by share_id: ${shareId}`);
         const tx = db.transaction('journeys', 'readonly');
         const index = tx.store.index('share_id');
         const journey = await index.get(shareId);
         await tx.done;
         
         if (journey && journey.is_shared === 1) {
-          console.log('[DB Service - get] Found shared journey:', journey);
           return { is_shared: 1, share_id: journey.share_id, ...journey };
         } else {
-          console.warn(`[DB Service - get] Journey with share_id ${shareId} not found or not shared (is_shared=${journey?.is_shared}).`);
           return null;
         }
       }
       
-      console.warn('Unhandled get query:', query, params);
+      // Add support for prompt_attachments queries
+      if (normalizedQuery.includes('SELECT * FROM prompt_attachments WHERE id = ?')) {
+        const id = params[0];
+        return await db.get('prompt_attachments', id);
+      }
+
+      // Handle attachment list fetch by prompt_id
+      if (normalizedQuery.includes('SELECT id, filename, file_type, file_size, created_at FROM prompt_attachments WHERE prompt_id = ?')) {
+        const promptId = params[0];
+        const tx = db.transaction('prompt_attachments', 'readonly');
+        const index = tx.store.index('prompt_id');
+        const results = await index.getAll(promptId);
+        await tx.done;
+        return results;
+      }
+      
       return null;
     } catch (error) {
       console.error('Error in get query:', query, params, error);
@@ -179,9 +247,83 @@ const dbService = {
   async all(query, params = []) {
     try {
       const db = await getDB();
-      
-      // Normalize query by removing whitespace and newlines
       const normalizedQuery = query.replace(/\s+/g, ' ').trim();
+      
+      // SELECT tags for a prompt
+      if (normalizedQuery.includes('SELECT t.id, t.name FROM tags t JOIN prompt_tags pt ON t.id = pt.tag_id WHERE pt.prompt_id = ?')) {
+        const promptId = params[0];
+        
+        const tx = db.transaction(['prompt_tags', 'tags'], 'readonly');
+        const ptIndex = tx.objectStore('prompt_tags').index('prompt_id');
+        const promptTags = await ptIndex.getAll(promptId);
+        
+        // For each tag_id in the promptTags results, get the tag name
+        const tags = await Promise.all(
+          promptTags.map(async (pt) => {
+            const tag = await tx.objectStore('tags').get(pt.tag_id);
+            return tag ? { id: tag.id, name: tag.name } : null;
+          })
+        );
+        
+        await tx.done;
+        return tags.filter(Boolean);
+      }
+      
+      // SELECT attachments for a prompt
+      if (normalizedQuery.includes('SELECT id, filename, file_type, file_size, created_at FROM prompt_attachments WHERE prompt_id = ?')) {
+        const promptId = params[0];
+        
+        try {
+          // Validate promptId is a valid parameter for IndexedDB
+          if (promptId === undefined || promptId === null) {
+            console.error('ATTACHMENT DB DEBUG: Invalid prompt ID parameter:', promptId);
+            return []; // Return empty array for invalid parameters
+          }
+          
+          // Try to convert string IDs to numbers if needed
+          const parsedPromptId = typeof promptId === 'string' ? parseInt(promptId, 10) : promptId;
+          if (isNaN(parsedPromptId) || typeof parsedPromptId !== 'number') {
+            console.error('ATTACHMENT DB DEBUG: Failed to parse prompt ID as number:', promptId);
+            return []; // Return empty array for invalid parameters
+          }
+          
+          // First check if the store exists
+          if (!Array.from(db.objectStoreNames).includes('prompt_attachments')) {
+            console.error('ATTACHMENT DB DEBUG: prompt_attachments store does not exist!');
+            await forceResetDatabase();
+            return []; // Return empty array to avoid breaking the app
+          }
+          
+          // DIRECT ACCESS METHOD - Gets all attachments and filters by prompt_id in memory
+          const tx = db.transaction('prompt_attachments', 'readonly');
+          const store = tx.objectStore('prompt_attachments');
+          
+          // Get all attachments and filter manually
+          const allAttachments = await store.getAll();
+          
+          // Filter by prompt_id
+          const filteredAttachments = allAttachments.filter(a => {
+            const match = a.prompt_id === parsedPromptId;
+            return match;
+          });
+          
+          await tx.done;
+          
+          // Map to ensure consistent object structure
+          const result = filteredAttachments.map(attachment => ({
+            id: attachment.id,
+            filename: attachment.filename,
+            file_type: attachment.file_type,
+            file_size: attachment.file_size,
+            created_at: attachment.created_at
+          }));
+          
+          return result;
+        } catch (error) {
+          console.error('ATTACHMENT DB DEBUG: Error retrieving attachments:', error);
+          return []; // Return empty array to avoid breaking the app
+        }
+      }
       
       if (normalizedQuery.includes('SELECT * FROM journeys ORDER BY created_at DESC')) {
         const tx = db.transaction('journeys', 'readonly');
@@ -236,7 +378,6 @@ const dbService = {
         }
       }
       
-      console.warn('Unhandled all query:', query, params);
       return [];
     } catch (error) {
       console.error('Error in all query:', query, params, error);
@@ -535,22 +676,16 @@ const dbService = {
       // Handle Enable Sharing Update (Revised)
       if (normalizedQuery.startsWith('UPDATE journeys SET is_shared = 1') && normalizedQuery.includes('WHERE id = ?')) {
         const [shareId, idParam] = params; // Get ID parameter
-        console.log(`[DB Service - run] Raw ID param for enable sharing: ${idParam} (type: ${typeof idParam})`);
         const id = parseInt(idParam, 10); // Explicitly parse as integer
         
         if (isNaN(id)) { // Check if parsing failed or input was invalid
-          console.error('[DB Service - run] Invalid Journey ID for enabling sharing:', idParam);
-          // Avoid transaction errors by not proceeding
-          // Since we haven't started the tx yet, just return
           return { changes: 0 };
         }
         
-        console.log(`[DB Service - run] Parsed ID for store.get: ${id} (type: ${typeof id})`);
         const tx = db.transaction('journeys', 'readwrite');
         const store = tx.objectStore('journeys');
         
         try {
-          console.log(`[DB Service - run] Attempting store.get with ID: ${id} (type: ${typeof id})`);
           const journey = await store.get(id); // Use parsed ID
           if (journey) {
             const updatedJourney = {
@@ -563,16 +698,11 @@ const dbService = {
               share_id: shareId, // Update share ID
               updated_at: new Date().toISOString() // Update modification date
             };
-            console.log('[DB Service - run] Object to PUT (Enable Sharing):', updatedJourney);
             await store.put(updatedJourney);
-            console.log(`[DB Service - run] Updated journey ${id} for enabling sharing.`);
-          } else {
-            console.warn(`[DB Service - run] Journey ${id} not found for enabling sharing.`);
           }
           await tx.done;
           return { changes: journey ? 1 : 0 };
         } catch (getPutError) {
-          console.error('[DB Service - run] Error during get/put in enable sharing:', getPutError);
           await tx.done; // Ensure transaction completes even on error
           throw getPutError; // Re-throw error to be caught higher up
         }
@@ -581,20 +711,16 @@ const dbService = {
       // Handle Disable Sharing Update (Revised)
       if (normalizedQuery.startsWith('UPDATE journeys SET is_shared = 0') && normalizedQuery.includes('WHERE id = ?')) {
         const [idParam] = params; // Get ID parameter
-        console.log(`[DB Service - run] Raw ID param for disable sharing: ${idParam} (type: ${typeof idParam})`);
         const id = parseInt(idParam, 10); // Explicitly parse as integer
         
         if (isNaN(id)) { // Check if parsing failed
-          console.error('[DB Service - run] Invalid Journey ID for disabling sharing:', idParam);
           return { changes: 0 };
         }
         
-        console.log(`[DB Service - run] Parsed ID for store.get: ${id} (type: ${typeof id})`);
         const tx = db.transaction('journeys', 'readwrite');
         const store = tx.objectStore('journeys');
         
         try {
-          console.log(`[DB Service - run] Attempting store.get with ID: ${id} (type: ${typeof id})`);
           const journey = await store.get(id); // Use parsed ID
           if (journey) {
             const updatedJourney = {
@@ -607,22 +733,77 @@ const dbService = {
               share_id: null, // Clear share ID
               updated_at: new Date().toISOString() // Update modification date
             };
-            console.log('[DB Service - run] Object to PUT (Disable Sharing):', updatedJourney);
             await store.put(updatedJourney);
-            console.log(`[DB Service - run] Disabled sharing for journey ${id}.`);
-          } else {
-            console.warn(`[DB Service - run] Journey ${id} not found for disabling sharing.`);
           }
           await tx.done;
           return { changes: journey ? 1 : 0 };
         } catch (getPutError) {
-          console.error('[DB Service - run] Error during get/put in disable sharing:', getPutError);
           await tx.done;
           throw getPutError;
         }
       }
       
-      console.warn('Unhandled run query:', query, params);
+      // Insert attachment
+      if (normalizedQuery.includes('INSERT INTO prompt_attachments')) {
+        const [promptId, filename, fileType, fileSize, fileData] = params;
+        
+        // Validate promptId
+        if (promptId === undefined || promptId === null) {
+          console.error('DB SERVICE ERROR: Cannot insert attachment with invalid prompt ID:', promptId);
+          throw new Error('Invalid prompt ID for attachment');
+        }
+        
+        // Always ensure promptId is a number
+        const parsedPromptId = typeof promptId === 'string' ? parseInt(promptId, 10) : promptId;
+        if (isNaN(parsedPromptId) || typeof parsedPromptId !== 'number') {
+          console.error('DB SERVICE ERROR: Failed to parse prompt ID as number:', promptId);
+          throw new Error('Prompt ID must be a valid number');
+        }
+        
+        // Verify prompt exists
+        const promptTx = db.transaction('prompts', 'readonly');
+        const prompt = await promptTx.objectStore('prompts').get(parsedPromptId);
+        await promptTx.done;
+        
+        if (!prompt) {
+          throw new Error(`Prompt with ID ${parsedPromptId} not found`);
+        }
+        
+        const tx = db.transaction('prompt_attachments', 'readwrite');
+        const store = tx.objectStore('prompt_attachments');
+        
+        const newAttachment = {
+          prompt_id: parsedPromptId,
+          filename,
+          file_type: fileType,
+          file_size: fileSize,
+          file_data: fileData,
+          created_at: new Date().toISOString()
+        };
+        
+        const id = await store.add(newAttachment);
+        await tx.done;
+        return { lastID: id };
+      }
+      
+      // Delete attachment
+      if (normalizedQuery.includes('DELETE FROM prompt_attachments WHERE id = ?')) {
+        const [id] = params;
+        const tx = db.transaction('prompt_attachments', 'readwrite');
+        const store = tx.objectStore('prompt_attachments');
+        
+        // Check if attachment exists
+        const attachment = await store.get(id);
+        if (!attachment) {
+          await tx.done;
+          return { changes: 0 };
+        }
+        
+        await store.delete(id);
+        await tx.done;
+        return { changes: 1 };
+      }
+      
       return { changes: 0 };
     } catch (error) {
       console.error('Error in run query:', query, params, error);
@@ -667,12 +848,10 @@ const dbService = {
     const db = await getDB();
     const tx = db.transaction('journeys', 'readwrite');
     const store = tx.objectStore('journeys');
-    console.log(`[DB Service - setJourneySharing] Updating ID: ${id}, isShared: ${isShared}, shareId: ${shareId}`);
     
     try {
       const journey = await store.get(id);
       if (!journey) {
-        console.warn(`[DB Service - setJourneySharing] Journey ${id} not found.`);
         await tx.done; // Ensure transaction completes
         return { changes: 0 };
       }
@@ -684,16 +863,59 @@ const dbService = {
         updated_at: new Date().toISOString() // Update timestamp
       };
       
-      console.log('[DB Service - setJourneySharing] Putting updated journey:', updatedJourney);
       await store.put(updatedJourney);
       await tx.done;
-      console.log('[DB Service - setJourneySharing] Update successful.');
       return { changes: 1 };
     } catch (error) {
-      console.error('[DB Service - setJourneySharing] Error during transaction:', error);
       // Attempt to complete the transaction even on error
       try { await tx.done; } catch (txError) { console.error('Error completing transaction after error:', txError); }
       throw error; // Re-throw the original error
+    }
+  },
+
+  // Add this function to the dbService object
+  async initializeDatabase() {
+    console.log('Initializing database...');
+    try {
+      // First check if the database exists and what version it is
+      const db = await getDB();
+      console.log(`Database initialized with version: ${db.version}`);
+      console.log('Object stores:', Array.from(db.objectStoreNames));
+      
+      // Check if all required stores exist
+      const requiredStores = ['journeys', 'steps', 'prompts', 'tags', 'prompt_tags', 'prompt_attachments'];
+      const missingStores = requiredStores.filter(
+        store => !Array.from(db.objectStoreNames).includes(store)
+      );
+      
+      if (missingStores.length > 0) {
+        console.error(`Missing required object stores: ${missingStores.join(', ')}`);
+        console.log('Will attempt to recreate the database...');
+        await forceResetDatabase();
+        
+        // Try to initialize again
+        const freshDb = await openDB(DB_NAME, DB_VERSION);
+        console.log(`Database recreated with version: ${freshDb.version}`);
+        console.log('New object stores:', Array.from(freshDb.objectStoreNames));
+        
+        return {
+          success: true,
+          resetPerformed: true,
+          stores: Array.from(freshDb.objectStoreNames)
+        };
+      }
+      
+      return {
+        success: true,
+        resetPerformed: false,
+        stores: Array.from(db.objectStoreNames)
+      };
+    } catch (error) {
+      console.error('Failed to initialize database:', error);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 };

@@ -140,8 +140,8 @@ const NarrativeJourneyPage = () => {
   
   return (
     <NarrativeLayout onOpenShareModal={handleOpenShareModal}>
-      {/* Header with journey info */}
-      <div className="mb-8">
+      {/* Header with journey info - Stays at top, doesn't grow */}
+      <div className="mb-8 flex-shrink-0">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold" style={{ color: currentStep?.color || colors.terracotta }}>
             {currentStep?.title || "Welcome to your journey"}
@@ -183,36 +183,47 @@ const NarrativeJourneyPage = () => {
         <JourneyProgressBar />
       </div>
       
-      {steps.length > 0 ? (
-        <>
-          {/* Journey timeline visualization */}
-          <JourneyTimeline />
-          
-          {/* Current stage content */}
-          <StageContent />
-        </>
-      ) : (
-        <div className="mt-12 text-center py-16 bg-white rounded-xl shadow-card">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-beige flex items-center justify-center">
-            <Plus size={28} color={colors.darkBrown} />
+      {/* Container for Timeline and Stage Content - Takes remaining vertical space */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {steps.length > 0 ? (
+          <>
+            {/* Journey timeline visualization - Doesn't grow */}
+            <div className="mb-6 flex-shrink-0">
+              <JourneyTimeline />
+            </div>
+            
+            {/* Stage Content - Takes remaining space and handles its own scroll */}
+            <div className="flex-1 min-h-0">
+              <StageContent />
+            </div>
+          </>
+        ) : (
+          // No Steps Message - Centered vertically and horizontally
+          <div className="flex-1 flex items-center justify-center">
+            <div className={`text-center py-16 bg-white dark:bg-gray-800 rounded-xl shadow-card`}>
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-beige flex items-center justify-center">
+                <Plus size={28} color={colors.darkBrown} />
+              </div>
+              <h3 className="text-lg font-semibold text-charcoal mb-2">No Steps Yet</h3>
+              <p className="text-darkBrown mb-6 max-w-md mx-auto">
+                Start building your journey by adding your first step. Each step represents a stage in your prompt flow.
+              </p>
+              <Button 
+                variant="primary" 
+                icon={<Plus size={18} />} 
+                style={{ backgroundColor: colors.terracotta }}
+                onClick={() => setShowCreateModal(true)}
+                disabled={!currentJourney?.id}
+              >
+                Add Your First Step
+              </Button>
+            </div>
           </div>
-          <h3 className="text-lg font-semibold text-charcoal mb-2">No Steps Yet</h3>
-          <p className="text-darkBrown mb-6 max-w-md mx-auto">
-            Start building your journey by adding your first step. Each step represents a stage in your prompt flow.
-          </p>
-          <Button 
-            variant="primary" 
-            icon={<Plus size={18} />} 
-            style={{ backgroundColor: colors.terracotta }}
-            onClick={() => setShowCreateModal(true)}
-            disabled={!currentJourney?.id}
-          >
-            Add Your First Step
-          </Button>
-        </div>
-      )}
+        )}
+      </div>
       
-      {/* Create Step Modal */}
+      {/* Modals remain outside the main flex layout */}
+      {/* ... Create Step Modal ... */}
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
@@ -225,7 +236,7 @@ const NarrativeJourneyPage = () => {
         />
       </Modal>
       
-      {/* Edit Step Modal */}
+      {/* ... Edit Step Modal ... */}
       <Modal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
@@ -241,7 +252,7 @@ const NarrativeJourneyPage = () => {
         )}
       </Modal>
       
-      {/* Manage Steps Modal */}
+      {/* ... Manage Steps Modal ... */}
       <Modal
         isOpen={showManageModal}
         onClose={() => setShowManageModal(false)}
@@ -297,7 +308,7 @@ const NarrativeJourneyPage = () => {
         </div>
       </Modal>
       
-      {/* Delete Confirmation Modal */}
+      {/* ... Delete Confirmation Modal ... */}
       <Modal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
@@ -327,7 +338,7 @@ const NarrativeJourneyPage = () => {
         </div>
       </Modal>
       
-      {/* --- Share Journey Modal --- */}
+      {/* ... Share Journey Modal ... */}
       <ShareJourneyModal 
         isOpen={showShareModal} 
         onClose={() => setShowShareModal(false)} 

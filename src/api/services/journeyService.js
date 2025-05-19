@@ -1,5 +1,6 @@
 import dbService from '../db/database-service';
 import { v4 as uuidv4 } from 'uuid'; // Import UUID generator
+import { stepService } from './stepService'; // Import stepService
 
 export const journeyService = {
   // Get all journeys
@@ -29,50 +30,29 @@ export const journeyService = {
     }
   },
   
-  // Get journey by ID with steps (include sharing info AND prompt tags)
+  // Get journey by ID with steps (including prompts, tags, and attachments)
   async getJourneyWithSteps(journeyId) {
     try {
       const journey = await dbService.get('SELECT *, is_shared, share_id FROM journeys WHERE id = ?', [journeyId]);
     
       if (!journey) {
         console.warn(`[Service] Journey with ID ${journeyId} not found.`);
-        // Return null or a specific error object instead of throwing?
-        return null; // Modified to return null for clearer handling in frontend
-        // throw new Error(`Journey with ID ${journeyId} not found`);
+        return null;
       }
     
-      const steps = await dbService.all(
-        'SELECT * FROM steps WHERE journey_id = ? ORDER BY position ASC',
-        [journeyId]
-      );
+      // Use stepService to get steps with full details (prompts, tags, attachments)
+      console.log(`[Service] Calling stepService.getStepsWithPrompts for journey ID: ${journeyId}`);
+      const steps = await stepService.getStepsWithPrompts(journeyId);
       
-      // Fetch prompt content AND tags for each step
-      const stepsWithFullPrompts = await Promise.all(steps.map(async (step) => {
-        let prompt = await dbService.get('SELECT * FROM prompts WHERE step_id = ?', [step.id]);
-        if (prompt) {
-          // Fetch tags for this prompt if it exists
-          console.log(`[Service] Fetching tags for prompt ID: ${prompt.id}`);
-          const tags = await dbService.all('SELECT t.id, t.name FROM tags t JOIN prompt_tags pt ON t.id = pt.tag_id WHERE pt.prompt_id = ?', [prompt.id]);
-          console.log(`[Service] Fetched tags for prompt ${prompt.id}:`, tags);
-          prompt = { ...prompt, tags: tags || [] }; // Add tags array to prompt object
-        } else {
-          console.log(`[Service] No prompt found for step ID: ${step.id}, setting empty prompt object.`);
-          // Ensure prompt is at least an empty object if null/undefined
-          prompt = { content: '', tags: [] };
-        }
-        console.log(`[Service] Final prompt object for step ${step.id}:`, JSON.stringify(prompt));
-        return { ...step, prompt };
-      }));
-      
-      console.log(`[Service] Fetched journey ${journeyId} with ${stepsWithFullPrompts.length} steps, prompts, and tags.`);
-      return { ...journey, steps: stepsWithFullPrompts };
+      console.log(`[Service] Fetched journey ${journeyId} with ${steps.length} full steps.`);
+      return { ...journey, steps };
     } catch (error) {
       console.error(`Error fetching journey with ID ${journeyId}:`, error);
       throw error;
     }
   },
   
-  // Get public journey by share_id (include prompt tags)
+  // Get public journey by share_id (include prompt tags AND attachments)
   async getJourneyByShareId(shareId) {
     try {
       const journey = await dbService.get(
@@ -85,29 +65,12 @@ export const journeyService = {
         return null; 
       }
 
-      // Fetch steps and prompts for the shared journey (similar to getJourneyWithSteps)
-      const steps = await dbService.all(
-        'SELECT * FROM steps WHERE journey_id = ? ORDER BY position ASC',
-        [journey.id]
-      );
-      const stepsWithFullPrompts = await Promise.all(steps.map(async (step) => {
-        let prompt = await dbService.get('SELECT * FROM prompts WHERE step_id = ?', [step.id]);
-        if (prompt) {
-          // Fetch tags for this prompt
-          console.log(`[Service] Fetching tags for prompt ID: ${prompt.id}`);
-          const tags = await dbService.all('SELECT t.id, t.name FROM tags t JOIN prompt_tags pt ON t.id = pt.tag_id WHERE pt.prompt_id = ?', [prompt.id]);
-          console.log(`[Service] Fetched tags for prompt ${prompt.id}:`, tags);
-          prompt = { ...prompt, tags: tags || [] };
-        } else {
-          console.log(`[Service] No prompt found for step ID: ${step.id}, setting empty prompt object.`);
-          prompt = { content: '', tags: [] };
-        }
-        console.log(`[Service] Final prompt object for step ${step.id}:`, JSON.stringify(prompt));
-        return { ...step, prompt };
-      }));
+      // Use stepService to get steps with full details (prompts, tags, attachments)
+      console.log(`[Service] Calling stepService.getStepsWithPrompts for shared journey ID: ${journey.id}`);
+      const steps = await stepService.getStepsWithPrompts(journey.id);
       
-      console.log(`[Service] Fetched shared journey ${journey.id} via share_id ${shareId} with prompts and tags.`);
-      return { ...journey, steps: stepsWithFullPrompts };
+      console.log(`[Service] Fetched shared journey ${journey.id} via share_id ${shareId} with ${steps.length} full steps.`);
+      return { ...journey, steps };
 
     } catch (error) {
       console.error(`Error fetching journey by share_id ${shareId}:`, error);
