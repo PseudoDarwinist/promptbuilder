@@ -6,6 +6,7 @@ import Button from '../common/Button';
 import Tag from '../common/Tag';
 import AttachmentViewer from '../common/AttachmentViewer';
 import FileUploader from '../common/FileUploader';
+import { stepService } from '../../api/services/stepService';
 
 const StageContent = () => {
   // Select primitive state values directly
@@ -22,7 +23,20 @@ const StageContent = () => {
   // Derive currentStep inside the component using useMemo
   const currentStep = React.useMemo(() => {
     if (currentStepIndex >= 0 && currentStepIndex < steps.length) {
-      return steps[currentStepIndex];
+      const step = steps[currentStepIndex];
+      console.log('[STAGE_CONTENT] Current step derived:', {
+        id: step?.id,
+        title: step?.title,
+        has_prompt: !!step?.prompt,
+        attachment_count: step?.prompt?.attachments?.length || 0,
+        attachments: step?.prompt?.attachments?.map(a => ({
+          id: a.id,
+          filename: a.filename,
+          has_data: !!a.file_data,
+          data_length: a.file_data?.length || 0
+        }))
+      });
+      return step;
     }
     return null;
   }, [steps, currentStepIndex]);
@@ -118,28 +132,49 @@ const StageContent = () => {
   };
 
   // Handle attachment download
-  const handleAttachmentDownload = async (attachment) => {
+  const handleAttachmentDownload = async (attachmentToDownload) => {
+    console.log('[StageContent] handleAttachmentDownload called for:', attachmentToDownload?.filename, 'ID:', attachmentToDownload?.id);
+    if (!attachmentToDownload || !attachmentToDownload.id) {
+      alert('Invalid attachment data for download.');
+      return;
+    }
+
     try {
-      // Call the API endpoint to download the attachment
-      const response = await fetch(`/api/steps/attachments/${attachment.id}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to download attachment');
+      // Get the full attachment data (including file_data) directly from the service
+      console.log(`[StageContent] Calling stepService.getAttachment with ID: ${attachmentToDownload.id}`);
+      const fullAttachment = await stepService.getAttachment(attachmentToDownload.id);
+
+      if (!fullAttachment || !fullAttachment.file_data) {
+        console.error('[StageContent] Failed to retrieve full attachment data or file_data is missing.');
+        alert('Error: Could not retrieve attachment data for download.');
+        return;
       }
-      
-      // Create a download link
+      console.log('[StageContent] Full attachment data retrieved. Filename:', fullAttachment.filename, 'Data length:', fullAttachment.file_data.length);
+
+      // Use fetch to convert data URL to blob (robust method)
+      const response = await fetch(fullAttachment.file_data);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status} while fetching data URL`);
+      }
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      console.log('[StageContent] Blob created. Type:', blob.type, 'Size:', blob.size);
+      
+      // Create and trigger download link
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = attachment.filename;
+      a.download = fullAttachment.filename || 'download';
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
     } catch (error) {
-      console.error('Error downloading attachment:', error);
-      alert('Failed to download attachment');
+      console.error('[StageContent] Error downloading attachment:', error);
+      alert('Failed to download attachment: ' + error.message);
     }
   };
   
@@ -415,21 +450,17 @@ const StageContent = () => {
           
           {showPromptDetails && !isEditing && (
             <>
-              {currentStep.prompt?.tags && currentStep.prompt.tags.length > 0 && (
-                <div className="mt-6">
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm font-medium text-charcoal dark:text-gray-300">Tags</h4>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {currentStep.prompt.tags.map(tag => (
-                      <Tag key={tag.id || tag.name} label={tag.name} />
-                    ))}
-                  </div>
-                </div>
-              )}
-              
               {currentStep.prompt?.attachments && Array.isArray(currentStep.prompt.attachments) && (
                 <>
+                  {console.log('[STAGE_CONTENT] Attachments before rendering AttachmentViewer:', {
+                    count: currentStep.prompt.attachments.length,
+                    attachments: currentStep.prompt.attachments.map(a => ({
+                      id: a.id,
+                      filename: a.filename,
+                      has_data: !!a.file_data,
+                      data_length: a.file_data?.length || 0
+                    }))
+                  })}
                   {currentStep.prompt.attachments.length > 0 ? (
                     <AttachmentViewer 
                       attachments={currentStep.prompt.attachments} 
@@ -448,10 +479,11 @@ const StageContent = () => {
               {!isEditing && !isAddingAttachments && (
                 <div className="mt-4 text-right">
                   <Button
-                    variant="text"
+                    variant="primary"
                     onClick={() => setIsAddingAttachments(true)}
                     icon={<Paperclip size={16} />}
-                    className="text-darkBrown dark:text-gray-300 hover:text-terracotta dark:hover:text-terracotta"
+                    className="text-white dark:text-gray-900 hover:opacity-90"
+                    style={{ backgroundColor: colors.skyBlue, borderRadius: '9999px', padding: '0.5rem 1rem' }}
                   >
                     Add Attachments
                   </Button>
@@ -491,13 +523,14 @@ const StageContent = () => {
           {showPromptDetails && !isEditing && (
             <div className="mt-6 text-right">
               <Button 
-                variant="secondary"
+                variant="primary"
                 onClick={() => {
                   setEditedContent(currentStep.prompt?.content || '');
                   setIsEditing(true);
                 }}
                 icon={<Edit size={16} />}
-                className="dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
+                style={{ backgroundColor: currentStep.color }}
+                className="text-white dark:text-gray-900 hover:opacity-90"
               >
                 {currentStep.prompt?.content ? 'Edit Prompt' : 'Add Prompt Content'}
               </Button>

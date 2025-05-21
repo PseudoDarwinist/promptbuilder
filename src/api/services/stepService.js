@@ -42,7 +42,7 @@ export const stepService = {
           }
           
           attachments = await dbService.all(`
-            SELECT id, filename, file_type, file_size, created_at
+            SELECT id, filename, file_type, file_size, created_at, file_data
             FROM prompt_attachments
             WHERE prompt_id = ?
           `, [prompt.id]);
@@ -130,7 +130,7 @@ export const stepService = {
               throw new Error('Prompt ID must be a number');
             }
             attachments = await dbService.all(`
-              SELECT id, filename, file_type, file_size, created_at
+              SELECT id, filename, file_type, file_size, created_at, file_data
               FROM prompt_attachments
               WHERE prompt_id = ?
             `, [prompt.id]);
@@ -176,22 +176,30 @@ export const stepService = {
   
   // Add attachment to a prompt
   async addAttachment(promptId, attachment) {
-    // console.log(`STEP_SERVICE DEBUG: addAttachment called with promptId: ${promptId} (type: ${typeof promptId}), filename: ${attachment?.filename}`); // Removed log
+    console.log(`[DEBUG] addAttachment called with: 
+      promptId: ${promptId} (type: ${typeof promptId})
+      attachment filename: ${attachment?.filename}
+      attachment type: ${attachment?.file_type}
+      attachment size: ${attachment?.file_size}
+      attachment data length: ${attachment?.file_data?.length || 0}
+    `);
+    
     try {
       // Validate promptId is a valid number
       if (!promptId || typeof promptId !== 'number') {
-        console.error(`STEP_SERVICE DEBUG: Invalid prompt ID: ${promptId} (type: ${typeof promptId})`);
+        console.error(`[ERROR] Invalid prompt ID: ${promptId} (type: ${typeof promptId})`);
         throw new Error('Prompt ID is required and must be a number');
       }
       
       if (!attachment || !attachment.file_data) {
-        console.error(`STEP_SERVICE DEBUG: Missing attachment data for file ${attachment?.filename}`);
+        console.error(`[ERROR] Missing attachment data for file ${attachment?.filename}`);
         throw new Error('Attachment file data is required');
       }
       
-      // console.log(`STEP_SERVICE DEBUG: Proceeding to add attachment for prompt ID: ${promptId}`); // Removed log
+      console.log(`[DEBUG] Proceeding to add attachment for prompt ID: ${promptId}`);
 
       // Use dbService.run which handles the database interaction including prompt check
+      console.log(`[DEBUG] Calling dbService.run to insert attachment`);
       const result = await dbService.run(
         'INSERT INTO prompt_attachments (prompt_id, filename, file_type, file_size, file_data) VALUES (?, ?, ?, ?, ?)',
         [
@@ -202,14 +210,15 @@ export const stepService = {
           attachment.file_data
         ]
       );
+      console.log(`[DEBUG] dbService.run result:`, result);
 
       if (!result || !result.lastID) {
-        console.error(`STEP_SERVICE DEBUG: dbService.run did not return a valid result for attachment insert.`);
+        console.error(`[ERROR] dbService.run did not return a valid result for attachment insert.`);
         throw new Error('Failed to insert attachment into database.');
       }
 
       const id = result.lastID;
-      // console.log(`STEP_SERVICE DEBUG: Successfully added attachment with ID ${id} to prompt ${promptId}`); // Removed log
+      console.log(`[DEBUG] Successfully added attachment with ID ${id} to prompt ${promptId}`);
         
       return {
         id,
@@ -220,7 +229,7 @@ export const stepService = {
         created_at: new Date().toISOString()
       };
     } catch (error) {
-      console.error(`STEP_SERVICE DEBUG: Error in addAttachment for prompt ${promptId}:`, error);
+      console.error(`[ERROR] Error in addAttachment for prompt ${promptId}:`, error);
       throw error; // Rethrow so caller can handle
     }
   },
@@ -239,6 +248,15 @@ export const stepService = {
   // Create a new step
   async createStep(stepData) {
     try {
+      console.log(`[DEBUG] createStep called with data:`, {
+        journey_id: stepData?.journey_id,
+        step_id: stepData?.step_id,
+        title: stepData?.title,
+        has_prompt: !!stepData?.prompt,
+        has_attachments: !!(stepData?.prompt?.attachments?.length),
+        attachment_count: stepData?.prompt?.attachments?.length || 0
+      });
+
       if (!stepData) {
         throw new Error('No step data provided');
       }
@@ -287,7 +305,8 @@ export const stepService = {
       // Insert prompt if available
       let promptId = null;
       if (stepData.prompt && stepData.prompt.content) {
-        // console.log(`Adding prompt for step ${stepId} with content:`, stepData.prompt.content.substring(0, 50) + '...'); // Removed log
+        console.log(`[DEBUG] Adding prompt for step ${stepId} with content length:`, 
+          stepData.prompt.content?.length || 0);
         
         try {
           const promptResult = await dbService.run(
@@ -296,7 +315,7 @@ export const stepService = {
           );
           
           promptId = promptResult.lastID;
-          // console.log(`Created prompt with ID ${promptId}`); // Removed log
+          console.log(`[DEBUG] Created prompt with ID ${promptId}`);
           
           // Insert tags if available
           if (stepData.prompt.tags && stepData.prompt.tags.length > 0) {
@@ -331,11 +350,18 @@ export const stepService = {
           
           // Add attachments if available
           if (stepData.prompt.attachments && stepData.prompt.attachments.length > 0) {
-            // console.log(`Processing ${stepData.prompt.attachments.length} attachments for prompt ${promptId}`); // Removed log
+            console.log(`[DEBUG] Processing ${stepData.prompt.attachments.length} attachments for prompt ${promptId}`);
+            console.log(`[DEBUG] Attachment details:`, stepData.prompt.attachments.map(a => ({
+              filename: a.filename,
+              type: a.file_type,
+              size: a.file_size,
+              has_data: !!a.file_data,
+              data_length: a.file_data?.length || 0
+            })));
             
             // Ensure promptId is a valid number
             if (typeof promptId !== 'number') {
-              console.error(`Invalid prompt ID type: ${typeof promptId}, value: ${promptId}`);
+              console.error(`[ERROR] Invalid prompt ID type: ${typeof promptId}, value: ${promptId}`);
               throw new Error('Prompt ID must be a number');
             }
             
@@ -343,7 +369,7 @@ export const stepService = {
             const attachmentPromises = stepData.prompt.attachments.map(attachment => 
               this.addAttachment(promptId, attachment)
                 .catch(err => {
-                  console.error(`Failed to add attachment ${attachment.filename}:`, err);
+                  console.error(`[ERROR] Failed to add attachment ${attachment.filename}:`, err);
                   return null; // Return null for failed attachments
                 })
             );
@@ -353,24 +379,39 @@ export const stepService = {
             
             const successCount = results.filter(r => r.status === 'fulfilled' && r.value !== null).length;
             
-            if (successCount < stepData.prompt.attachments.length) {
-              console.warn(`Attachment processing partially failed: ${successCount} succeeded`);
-            }
+            console.log(`[DEBUG] Attachment processing results: ${successCount} of ${stepData.prompt.attachments.length} succeeded`);
+            results.forEach((result, index) => {
+              const filename = stepData.prompt.attachments[index]?.filename || 'unknown';
+              if (result.status === 'fulfilled' && result.value) {
+                console.log(`[DEBUG] Successfully added attachment: ${filename}`);
+              } else {
+                console.error(`[ERROR] Failed to add attachment: ${filename}`, 
+                  result.status === 'rejected' ? result.reason : 'No value returned');
+              }
+            });
+          } else {
+            console.log(`[DEBUG] No attachments to process for step ${stepId}`);
           }
         } catch (promptError) {
-          console.error(`Error creating prompt for step ${stepId}:`, promptError);
+          console.error(`[ERROR] Error creating prompt for step ${stepId}:`, promptError);
           // Continue even if prompt creation fails
         }
       } else {
-        // console.log(`No prompt content provided for step ${stepId}`); // Removed log
+        console.log(`[DEBUG] No prompt content provided for step ${stepId}`);
       }
       
       // Return the created step with its prompt and tags
       const createdStep = await this.getStepWithPrompt(stepId);
-      // console.log('Step created successfully:', createdStep); // Removed log
+      console.log('[DEBUG] Step created successfully with details:', {
+        id: createdStep.id,
+        title: createdStep.title,
+        has_prompt: !!createdStep.prompt,
+        has_attachments: !!(createdStep.prompt?.attachments?.length),
+        attachment_count: createdStep.prompt?.attachments?.length || 0
+      });
       return createdStep;
     } catch (error) {
-      console.error('Error creating step:', error);
+      console.error('[ERROR] Error creating step:', error);
       throw error;
     }
   },
@@ -378,6 +419,19 @@ export const stepService = {
   // Update a step
   async updateStep(stepId, stepData) {
     try {
+      console.log(`[DEBUG] updateStep called for stepId ${stepId} with data:`, {
+        title: stepData?.title,
+        has_prompt: !!stepData?.prompt,
+        has_attachments: !!(stepData?.prompt?.attachments?.length),
+        attachment_count: stepData?.prompt?.attachments?.length || 0,
+        attachments: stepData?.prompt?.attachments?.map(a => ({
+          filename: a.filename,
+          has_id: !!a.id,
+          has_data: !!a.file_data,
+          data_length: a.file_data?.length || 0
+        }))
+      });
+      
       if (!stepId) {
         throw new Error('Step ID is required for update');
       }
@@ -406,7 +460,7 @@ export const stepService = {
         const prompt = await dbService.get('SELECT id FROM prompts WHERE step_id = ?', [stepId]);
       
         if (prompt) {
-          // console.log(`Updating existing prompt ${prompt.id} for step ${stepId}`); // Removed log
+          console.log(`[DEBUG] Updating existing prompt ${prompt.id} for step ${stepId}`);
           
           // Update existing prompt
           await dbService.run(
@@ -448,11 +502,18 @@ export const stepService = {
             const newAttachments = stepData.prompt.attachments.filter(a => !a.id);
           
             if (newAttachments.length > 0) {
-              // console.log(`Adding ${newAttachments.length} new attachments to prompt ${prompt.id}`); // Removed log
+              console.log(`[DEBUG] Adding ${newAttachments.length} new attachments to prompt ${prompt.id}`);
+              console.log(`[DEBUG] New attachment details:`, newAttachments.map(a => ({
+                filename: a.filename,
+                type: a.file_type,
+                size: a.file_size,
+                has_data: !!a.file_data,
+                data_length: a.file_data?.length || 0
+              })));
             
               // Ensure prompt.id is a valid number
               if (typeof prompt.id !== 'number') {
-                console.error(`Invalid prompt ID type: ${typeof prompt.id}, value: ${prompt.id}`);
+                console.error(`[ERROR] Invalid prompt ID type: ${typeof prompt.id}, value: ${prompt.id}`);
                 throw new Error('Prompt ID must be a number');
               }
             
@@ -462,21 +523,23 @@ export const stepService = {
               // Add new attachments
               for (const attachment of newAttachments) {
                 try {
+                  console.log(`[DEBUG] Attempting to add attachment: ${attachment.filename}`);
                   const addedAttachment = await this.addAttachment(prompt.id, attachment);
                   if (addedAttachment) {
                     addedAttachments.push(addedAttachment);
+                    console.log(`[DEBUG] Successfully added attachment: ${attachment.filename}`);
                   }
                 } catch (attachErr) {
-                  console.error(`Failed to add attachment: ${attachErr.message}`);
+                  console.error(`[ERROR] Failed to add attachment: ${attachment.filename}`, attachErr);
                   // Continue with other attachments instead of failing completely
                 }
               }
               
-              // console.log(`Successfully added ${addedAttachments.length} new attachments`); // Removed log
+              console.log(`[DEBUG] Successfully added ${addedAttachments.length} of ${newAttachments.length} new attachments`);
             }
           }
         } else {
-          // console.log(`Creating new prompt for step ${stepId}`); // Removed log
+          console.log(`[DEBUG] Creating new prompt for step ${stepId}`);
           
           // Create new prompt
           const promptResult = await dbService.run(
@@ -485,7 +548,7 @@ export const stepService = {
           );
         
           const promptId = promptResult.lastID;
-          // console.log(`Created new prompt with ID ${promptId}`); // Removed log
+          console.log(`[DEBUG] Created new prompt with ID ${promptId}`);
           
           // Add tags if available
           if (stepData.prompt.tags && stepData.prompt.tags.length > 0) {
@@ -513,11 +576,18 @@ export const stepService = {
         
           // Add attachments if available
           if (stepData.prompt.attachments && stepData.prompt.attachments.length > 0) {
-            // console.log(`Adding ${stepData.prompt.attachments.length} attachments for new prompt ${promptId}`); // Removed log
+            console.log(`[DEBUG] Adding ${stepData.prompt.attachments.length} attachments for new prompt ${promptId}`);
+            console.log(`[DEBUG] Attachment details:`, stepData.prompt.attachments.map(a => ({
+              filename: a.filename,
+              type: a.file_type,
+              size: a.file_size,
+              has_data: !!a.file_data,
+              data_length: a.file_data?.length || 0
+            })));
             
             // Ensure promptId is a valid number
             if (typeof promptId !== 'number') {
-              console.error(`Invalid prompt ID type: ${typeof promptId}, value: ${promptId}`);
+              console.error(`[ERROR] Invalid prompt ID type: ${typeof promptId}, value: ${promptId}`);
               throw new Error('Prompt ID must be a number');
             }
             
@@ -526,17 +596,19 @@ export const stepService = {
             
             for (const attachment of stepData.prompt.attachments) {
               try {
+                console.log(`[DEBUG] Attempting to add attachment: ${attachment.filename}`);
                 const addedAttachment = await this.addAttachment(promptId, attachment);
                 if (addedAttachment) {
                   addedAttachments.push(addedAttachment);
+                  console.log(`[DEBUG] Successfully added attachment: ${attachment.filename}`);
                 }
               } catch (attachErr) {
-                console.error(`Failed to add attachment: ${attachErr.message}`);
+                console.error(`[ERROR] Failed to add attachment: ${attachment.filename}`, attachErr);
                 // Continue with other attachments instead of failing completely
               }
             }
             
-            // console.log(`Successfully added ${addedAttachments.length} attachments to new prompt`); // Removed log
+            console.log(`[DEBUG] Successfully added ${addedAttachments.length} of ${stepData.prompt.attachments.length} new attachments`);
           }
         }
       }
@@ -546,15 +618,16 @@ export const stepService = {
       
       // Return the updated step with its prompt and tags
       const updatedStep = await this.getStepWithPrompt(stepId);
-      // console.log('Step updated successfully:', JSON.stringify({ // Removed log
-      //   id: updatedStep.id,
-      //   title: updatedStep.title,
-      //   has_prompt: !!updatedStep.prompt,
-      //   attachment_count: updatedStep.prompt?.attachments?.length || 0
-      // }));
+      console.log('[DEBUG] Step updated successfully with details:', {
+        id: updatedStep.id,
+        title: updatedStep.title,
+        has_prompt: !!updatedStep.prompt,
+        has_attachments: !!(updatedStep.prompt?.attachments?.length),
+        attachment_count: updatedStep.prompt?.attachments?.length || 0
+      });
       return updatedStep;
     } catch (error) {
-      console.error(`Error updating step with ID ${stepId}:`, error);
+      console.error(`[ERROR] Error updating step with ID ${stepId}:`, error);
       throw error;
     }
   },

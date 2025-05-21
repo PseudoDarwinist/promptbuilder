@@ -185,41 +185,41 @@ const NarrativeJourneyPage = () => {
       
       {/* Container for Timeline and Stage Content - Takes remaining vertical space */}
       <div className="flex-1 flex flex-col min-h-0">
-        {steps.length > 0 ? (
-          <>
+      {steps.length > 0 ? (
+        <>
             {/* Journey timeline visualization - Doesn't grow */}
             <div className="mb-6 flex-shrink-0">
-              <JourneyTimeline />
+          <JourneyTimeline />
             </div>
-            
+          
             {/* Stage Content - Takes remaining space and handles its own scroll */}
             <div className="flex-1 min-h-0">
-              <StageContent />
+          <StageContent />
             </div>
-          </>
-        ) : (
+        </>
+      ) : (
           // No Steps Message - Centered vertically and horizontally
           <div className="flex-1 flex items-center justify-center">
             <div className={`text-center py-16 bg-white dark:bg-gray-800 rounded-xl shadow-card`}>
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-beige flex items-center justify-center">
-                <Plus size={28} color={colors.darkBrown} />
-              </div>
-              <h3 className="text-lg font-semibold text-charcoal mb-2">No Steps Yet</h3>
-              <p className="text-darkBrown mb-6 max-w-md mx-auto">
-                Start building your journey by adding your first step. Each step represents a stage in your prompt flow.
-              </p>
-              <Button 
-                variant="primary" 
-                icon={<Plus size={18} />} 
-                style={{ backgroundColor: colors.terracotta }}
-                onClick={() => setShowCreateModal(true)}
-                disabled={!currentJourney?.id}
-              >
-                Add Your First Step
-              </Button>
-            </div>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-beige flex items-center justify-center">
+            <Plus size={28} color={colors.darkBrown} />
           </div>
-        )}
+          <h3 className="text-lg font-semibold text-charcoal mb-2">No Steps Yet</h3>
+          <p className="text-darkBrown mb-6 max-w-md mx-auto">
+            Start building your journey by adding your first step. Each step represents a stage in your prompt flow.
+          </p>
+          <Button 
+            variant="primary" 
+            icon={<Plus size={18} />} 
+            style={{ backgroundColor: colors.terracotta }}
+            onClick={() => setShowCreateModal(true)}
+            disabled={!currentJourney?.id}
+          >
+            Add Your First Step
+          </Button>
+            </div>
+        </div>
+      )}
       </div>
       
       {/* Modals remain outside the main flex layout */}

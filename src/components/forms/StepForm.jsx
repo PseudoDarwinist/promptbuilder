@@ -12,6 +12,15 @@ import {
 import dbService from '../../api/db/database-service';
 
 const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
+  console.log('[DEBUG] StepForm initializing with initialData:', {
+    hasInitialData: !!initialData?.id,
+    initialId: initialData?.id,
+    initialTitle: initialData?.title,
+    initialJourneyId: initialData?.journey_id || journeyId,
+    hasPrompt: !!initialData?.prompt,
+    initialAttachmentCount: initialData?.prompt?.attachments?.length || 0
+  });
+
   const [formData, setFormData] = useState({
     journey_id: journeyId || initialData.journey_id,
     step_id: initialData.step_id || '',
@@ -24,6 +33,20 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
       tags: initialData.prompt?.tags?.map(tag => tag.name) || [],
       attachments: initialData.prompt?.attachments || []
     }
+  });
+
+  console.log('[DEBUG] StepForm initial state:', {
+    journey_id: formData.journey_id,
+    step_id: formData.step_id,
+    hasPrompt: !!formData.prompt,
+    attachmentCount: formData.prompt?.attachments?.length || 0,
+    attachments: formData.prompt?.attachments?.map?.(a => ({
+      filename: a.filename,
+      type: a.file_type,
+      size: a.file_size,
+      has_data: !!a.file_data,
+      data_length: a.file_data?.length || 0
+    }))
   });
   
   // Update journey_id if it changes
@@ -112,13 +135,27 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
   };
   
   const handleAttachmentsChange = (attachments) => {
-    setFormData(prev => ({
-      ...prev,
-      prompt: {
-        ...prev.prompt,
-        attachments
-      }
-    }));
+    console.log('[DEBUG] handleAttachmentsChange called with attachments count:', attachments?.length || 0);
+    console.log('[DEBUG] Attachments data:', attachments?.map?.(a => ({
+      filename: a.filename, 
+      type: a.file_type, 
+      size: a.file_size,
+      has_data: !!a.file_data,
+      data_length: a.file_data?.length || 0
+    })));
+    
+    setFormData(prev => {
+      const updated = {
+        ...prev,
+        prompt: {
+          ...prev.prompt,
+          attachments
+        }
+      };
+      
+      console.log('[DEBUG] Updated formData.prompt.attachments count:', updated.prompt.attachments?.length || 0);
+      return updated;
+    });
   };
   
   const validateForm = () => {
@@ -146,6 +183,24 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
       newErrors['prompt.content'] = 'Prompt content is required';
     }
     
+    // Add validation for attachments
+    if (formData.prompt?.attachments) {
+      console.log('[DEBUG] Validating attachments:', {
+        count: formData.prompt.attachments.length,
+        details: formData.prompt.attachments.map(a => ({
+          filename: a.filename,
+          has_data: !!a.file_data,
+          data_length: a.file_data?.length || 0
+        }))
+      });
+      
+      // Check if any attachment is missing data
+      const invalidAttachments = formData.prompt.attachments.filter(a => !a.file_data);
+      if (invalidAttachments.length > 0) {
+        newErrors['prompt.attachments'] = `Some attachments are missing data: ${invalidAttachments.map(a => a.filename).join(', ')}`;
+      }
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -153,8 +208,38 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     
+    console.log('[DEBUG] Form submission started with data:', {
+      id: initialData.id,
+      journey_id: formData.journey_id,
+      step_id: formData.step_id,
+      hasPrompt: !!formData.prompt,
+      attachmentCount: formData.prompt?.attachments?.length || 0,
+    });
+    
     if (validateForm()) {
-      onSubmit(formData);
+      console.log('[DEBUG] Form validated successfully, submitting with attachments count:', 
+        formData.prompt?.attachments?.length || 0);
+      
+      // Clone the data to avoid any reference issues
+      const dataToSubmit = JSON.parse(JSON.stringify(formData));
+      
+      console.log('[DEBUG] Submission data after JSON cycle:', {
+        journey_id: dataToSubmit.journey_id,
+        step_id: dataToSubmit.step_id,
+        hasPrompt: !!dataToSubmit.prompt,
+        attachmentCount: dataToSubmit.prompt?.attachments?.length || 0,
+        attachmentDetails: dataToSubmit.prompt?.attachments?.map(a => ({
+          filename: a.filename,
+          type: a.file_type,
+          size: a.file_size,
+          has_data: !!a.file_data,
+          data_length: a.file_data?.length || 0
+        }))
+      });
+      
+      onSubmit(dataToSubmit);
+    } else {
+      console.log('[DEBUG] Form validation failed with errors:', errors);
     }
   };
   

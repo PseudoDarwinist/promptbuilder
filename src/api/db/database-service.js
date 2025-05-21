@@ -227,13 +227,95 @@ const dbService = {
       }
 
       // Handle attachment list fetch by prompt_id
-      if (normalizedQuery.includes('SELECT id, filename, file_type, file_size, created_at FROM prompt_attachments WHERE prompt_id = ?')) {
+      if (normalizedQuery.includes('SELECT id, filename, file_type, file_size, created_at FROM prompt_attachments WHERE prompt_id = ?') ||
+          normalizedQuery.includes('SELECT id, filename, file_type, file_size, created_at, file_data FROM prompt_attachments WHERE prompt_id = ?')) {
         const promptId = params[0];
-        const tx = db.transaction('prompt_attachments', 'readonly');
-        const index = tx.store.index('prompt_id');
-        const results = await index.getAll(promptId);
-        await tx.done;
-        return results;
+        
+        try {
+          console.log(`[DB DEBUG] Fetching attachments for prompt ID ${promptId}`);
+          
+          // Validate promptId is a valid parameter for IndexedDB
+          if (promptId === undefined || promptId === null) {
+            console.error('[DB ERROR] Invalid prompt ID parameter:', promptId);
+            return []; // Return empty array for invalid parameters
+          }
+          
+          // Try to convert string IDs to numbers if needed
+          const parsedPromptId = typeof promptId === 'string' ? parseInt(promptId, 10) : promptId;
+          if (isNaN(parsedPromptId) || typeof parsedPromptId !== 'number') {
+            console.error('[DB ERROR] Failed to parse prompt ID as number:', promptId);
+            return []; // Return empty array for invalid parameters
+          }
+          
+          console.log(`[DB DEBUG] Parsed prompt ID: ${parsedPromptId}`);
+          
+          // First check if the store exists
+          if (!Array.from(db.objectStoreNames).includes('prompt_attachments')) {
+            console.error('[DB ERROR] prompt_attachments store does not exist!');
+            await forceResetDatabase();
+            return []; // Return empty array to avoid breaking the app
+          }
+          
+          // DIRECT ACCESS METHOD - Gets all attachments and filters by prompt_id in memory
+          const tx = db.transaction('prompt_attachments', 'readonly');
+          const store = tx.objectStore('prompt_attachments');
+          
+          // Determine if we should use the index or manual filtering
+          let attachments = [];
+          try {
+            // First try to use the index if it exists
+            if (store.indexNames.contains('prompt_id')) {
+              console.log(`[DB DEBUG] Using prompt_id index to fetch attachments`);
+              const index = store.index('prompt_id');
+              attachments = await index.getAll(parsedPromptId);
+              console.log(`[DB DEBUG] Retrieved ${attachments.length} attachments using index`);
+            } else {
+              // Fall back to manual filtering
+              console.log(`[DB DEBUG] prompt_id index not found, using manual filtering`);
+              const allAttachments = await store.getAll();
+              console.log(`[DB DEBUG] Retrieved ${allAttachments.length} total attachments from store`);
+              
+              // Filter by prompt_id
+              attachments = allAttachments.filter(a => a.prompt_id === parsedPromptId);
+              console.log(`[DB DEBUG] Filtered to ${attachments.length} attachments for prompt ID ${parsedPromptId}`);
+            }
+          } catch (indexError) {
+            console.error('[DB ERROR] Error using index, falling back to manual filtering:', indexError);
+            // Fall back to manual filtering
+            const allAttachments = await store.getAll();
+            console.log(`[DB DEBUG] Retrieved ${allAttachments.length} total attachments from store after fallback`);
+            
+            // Filter by prompt_id
+            attachments = allAttachments.filter(a => a.prompt_id === parsedPromptId);
+            console.log(`[DB DEBUG] Filtered to ${attachments.length} attachments for prompt ID ${parsedPromptId} after fallback`);
+          }
+          
+          await tx.done;
+          
+          // Map to ensure consistent object structure
+          const result = attachments.map(attachment => ({
+            id: attachment.id,
+            filename: attachment.filename,
+            file_type: attachment.file_type,
+            file_size: attachment.file_size,
+            created_at: attachment.created_at,
+            file_data: attachment.file_data // Always include file_data
+          }));
+          
+          console.log(`[DB DEBUG] Returning ${result.length} processed attachments with details:`, 
+            result.map(a => ({
+              id: a.id,
+              filename: a.filename,
+              has_file_data: !!a.file_data,
+              file_data_length: a.file_data ? a.file_data.length : 0
+            }))
+          );
+          
+          return result;
+        } catch (error) {
+          console.error('[DB ERROR] Error retrieving attachments:', error);
+          return []; // Return empty array to avoid breaking the app
+        }
       }
       
       return null;
@@ -270,26 +352,31 @@ const dbService = {
       }
       
       // SELECT attachments for a prompt
-      if (normalizedQuery.includes('SELECT id, filename, file_type, file_size, created_at FROM prompt_attachments WHERE prompt_id = ?')) {
+      if (normalizedQuery.includes('SELECT id, filename, file_type, file_size, created_at FROM prompt_attachments WHERE prompt_id = ?') ||
+          normalizedQuery.includes('SELECT id, filename, file_type, file_size, created_at, file_data FROM prompt_attachments WHERE prompt_id = ?')) {
         const promptId = params[0];
         
         try {
+          console.log(`[DB DEBUG] Fetching attachments for prompt ID ${promptId}`);
+          
           // Validate promptId is a valid parameter for IndexedDB
           if (promptId === undefined || promptId === null) {
-            console.error('ATTACHMENT DB DEBUG: Invalid prompt ID parameter:', promptId);
+            console.error('[DB ERROR] Invalid prompt ID parameter:', promptId);
             return []; // Return empty array for invalid parameters
           }
           
           // Try to convert string IDs to numbers if needed
           const parsedPromptId = typeof promptId === 'string' ? parseInt(promptId, 10) : promptId;
           if (isNaN(parsedPromptId) || typeof parsedPromptId !== 'number') {
-            console.error('ATTACHMENT DB DEBUG: Failed to parse prompt ID as number:', promptId);
+            console.error('[DB ERROR] Failed to parse prompt ID as number:', promptId);
             return []; // Return empty array for invalid parameters
           }
           
+          console.log(`[DB DEBUG] Parsed prompt ID: ${parsedPromptId}`);
+          
           // First check if the store exists
           if (!Array.from(db.objectStoreNames).includes('prompt_attachments')) {
-            console.error('ATTACHMENT DB DEBUG: prompt_attachments store does not exist!');
+            console.error('[DB ERROR] prompt_attachments store does not exist!');
             await forceResetDatabase();
             return []; // Return empty array to avoid breaking the app
           }
@@ -298,29 +385,60 @@ const dbService = {
           const tx = db.transaction('prompt_attachments', 'readonly');
           const store = tx.objectStore('prompt_attachments');
           
-          // Get all attachments and filter manually
-          const allAttachments = await store.getAll();
-          
-          // Filter by prompt_id
-          const filteredAttachments = allAttachments.filter(a => {
-            const match = a.prompt_id === parsedPromptId;
-            return match;
-          });
+          // Determine if we should use the index or manual filtering
+          let attachments = [];
+          try {
+            // First try to use the index if it exists
+            if (store.indexNames.contains('prompt_id')) {
+              console.log(`[DB DEBUG] Using prompt_id index to fetch attachments`);
+              const index = store.index('prompt_id');
+              attachments = await index.getAll(parsedPromptId);
+              console.log(`[DB DEBUG] Retrieved ${attachments.length} attachments using index`);
+            } else {
+              // Fall back to manual filtering
+              console.log(`[DB DEBUG] prompt_id index not found, using manual filtering`);
+              const allAttachments = await store.getAll();
+              console.log(`[DB DEBUG] Retrieved ${allAttachments.length} total attachments from store`);
+              
+              // Filter by prompt_id
+              attachments = allAttachments.filter(a => a.prompt_id === parsedPromptId);
+              console.log(`[DB DEBUG] Filtered to ${attachments.length} attachments for prompt ID ${parsedPromptId}`);
+            }
+          } catch (indexError) {
+            console.error('[DB ERROR] Error using index, falling back to manual filtering:', indexError);
+            // Fall back to manual filtering
+            const allAttachments = await store.getAll();
+            console.log(`[DB DEBUG] Retrieved ${allAttachments.length} total attachments from store after fallback`);
+            
+            // Filter by prompt_id
+            attachments = allAttachments.filter(a => a.prompt_id === parsedPromptId);
+            console.log(`[DB DEBUG] Filtered to ${attachments.length} attachments for prompt ID ${parsedPromptId} after fallback`);
+          }
           
           await tx.done;
           
           // Map to ensure consistent object structure
-          const result = filteredAttachments.map(attachment => ({
+          const result = attachments.map(attachment => ({
             id: attachment.id,
             filename: attachment.filename,
             file_type: attachment.file_type,
             file_size: attachment.file_size,
-            created_at: attachment.created_at
+            created_at: attachment.created_at,
+            file_data: attachment.file_data // Always include file_data
           }));
+          
+          console.log(`[DB DEBUG] Returning ${result.length} processed attachments with details:`, 
+            result.map(a => ({
+              id: a.id,
+              filename: a.filename,
+              has_file_data: !!a.file_data,
+              file_data_length: a.file_data ? a.file_data.length : 0
+            }))
+          );
           
           return result;
         } catch (error) {
-          console.error('ATTACHMENT DB DEBUG: Error retrieving attachments:', error);
+          console.error('[DB ERROR] Error retrieving attachments:', error);
           return []; // Return empty array to avoid breaking the app
         }
       }
@@ -747,43 +865,75 @@ const dbService = {
       if (normalizedQuery.includes('INSERT INTO prompt_attachments')) {
         const [promptId, filename, fileType, fileSize, fileData] = params;
         
+        console.log(`[DB DEBUG] Inserting attachment:
+          promptId: ${promptId} (type: ${typeof promptId})
+          filename: ${filename}
+          fileType: ${fileType}
+          fileSize: ${fileSize}
+          fileData length: ${fileData?.length || 0}
+          fileData exists: ${!!fileData}
+        `);
+        
         // Validate promptId
         if (promptId === undefined || promptId === null) {
-          console.error('DB SERVICE ERROR: Cannot insert attachment with invalid prompt ID:', promptId);
+          console.error('[DB ERROR] Cannot insert attachment with invalid prompt ID:', promptId);
           throw new Error('Invalid prompt ID for attachment');
         }
         
         // Always ensure promptId is a number
         const parsedPromptId = typeof promptId === 'string' ? parseInt(promptId, 10) : promptId;
         if (isNaN(parsedPromptId) || typeof parsedPromptId !== 'number') {
-          console.error('DB SERVICE ERROR: Failed to parse prompt ID as number:', promptId);
+          console.error('[DB ERROR] Failed to parse prompt ID as number:', promptId);
           throw new Error('Prompt ID must be a valid number');
         }
         
+        console.log(`[DB DEBUG] Parsed promptId: ${parsedPromptId}`);
+        
         // Verify prompt exists
         const promptTx = db.transaction('prompts', 'readonly');
+        console.log(`[DB DEBUG] Checking if prompt with ID ${parsedPromptId} exists`);
         const prompt = await promptTx.objectStore('prompts').get(parsedPromptId);
         await promptTx.done;
         
         if (!prompt) {
+          console.error(`[DB ERROR] Prompt with ID ${parsedPromptId} not found`);
           throw new Error(`Prompt with ID ${parsedPromptId} not found`);
         }
         
-        const tx = db.transaction('prompt_attachments', 'readwrite');
-        const store = tx.objectStore('prompt_attachments');
+        console.log(`[DB DEBUG] Found prompt with ID ${parsedPromptId}, proceeding with attachment`);
         
-        const newAttachment = {
-          prompt_id: parsedPromptId,
-          filename,
-          file_type: fileType,
-          file_size: fileSize,
-          file_data: fileData,
-          created_at: new Date().toISOString()
-        };
+        // Validate fileData
+        if (!fileData) {
+          console.error('[DB ERROR] Missing file data for attachment:', filename);
+          throw new Error('File data is required for attachment');
+        }
         
-        const id = await store.add(newAttachment);
-        await tx.done;
-        return { lastID: id };
+        try {
+          console.log(`[DB DEBUG] Opening prompt_attachments transaction`);
+          const tx = db.transaction('prompt_attachments', 'readwrite');
+          const store = tx.objectStore('prompt_attachments');
+          
+          const newAttachment = {
+            prompt_id: parsedPromptId,
+            filename,
+            file_type: fileType,
+            file_size: fileSize,
+            file_data: fileData,
+            created_at: new Date().toISOString()
+          };
+          
+          console.log(`[DB DEBUG] Calling store.add with attachment data`);
+          const id = await store.add(newAttachment);
+          console.log(`[DB DEBUG] store.add successful, got ID: ${id}`);
+          
+          await tx.done;
+          console.log(`[DB DEBUG] Transaction completed successfully`);
+          
+          return { lastID: id };
+        } catch (attachmentError) {
+          console.error('[DB ERROR] Failed to insert attachment:', attachmentError);
+          throw attachmentError;
+        }
       }
       
       // Delete attachment

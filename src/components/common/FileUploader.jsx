@@ -46,26 +46,31 @@ const FileUploader = ({ files, onChange, maxSize = 5 * 1024 * 1024 }) => {
         try {
           console.log('Processing file:', file.name, 'size:', file.size, 'type:', file.type);
           const fileData = await readFileAsDataURL(file);
-          console.log('File data converted to base64, length:', fileData.length);
+          console.log('File data converted to base64, length:', fileData.length, 'for file:', file.name);
           
-          return {
+          const fileObject = {
             filename: file.name,
             file_type: file.type,
             file_size: file.size,
-            file_data: fileData,
-            file // Keep the original file for preview
+            file_data: fileData
           };
+          console.log('Successfully created file object for:', file.name, 'Validating data:', !!fileData);
+          return fileObject;
         } catch (err) {
-          console.error('Error processing file:', file.name, err);
+          console.error('ERROR during file processing for:', file.name, 'Details:', err);
           return null;
         }
       })
     );
     
+    console.log('Result of Promise.all (newFiles array):', newFiles);
+
     // Filter out any null entries (failed conversions)
     const validFiles = newFiles.filter(f => f !== null);
+    console.log('Filtered validFiles array:', validFiles.map(f => f.filename));
     
-    if (validFiles.length === 0) {
+    if (validFiles.length === 0 && fileArray.length > 0) {
+      // Only set error if there were files to process but none were valid
       setError('Failed to process any files. Please try again with different files.');
       return;
     }
