@@ -16,21 +16,10 @@ export const stepService = {
       // Get prompt for step
       const prompt = await dbService.get('SELECT * FROM prompts WHERE step_id = ?', [step.id]);
     
-      // Get tags for prompt if available
-      let tags = [];
       // Get attachments for prompt if available
       let attachments = [];
       
       if (prompt) {
-        tags = await dbService.all(`
-          SELECT t.id, t.name 
-          FROM tags t
-          JOIN prompt_tags pt ON t.id = pt.tag_id
-          WHERE pt.prompt_id = ?
-        `, [prompt.id]);
-        
-        // console.log(`Retrieved ${tags.length} tags for prompt ${prompt.id}`); // Removed log
-        
         // Get attachments list (without file data)
         try {
           // console.log('ATTACHMENT DEBUG: Fetching attachments for prompt ID:', prompt.id); // Removed log
@@ -74,7 +63,6 @@ export const stepService = {
         ...step, 
         prompt: prompt ? { 
           ...prompt, 
-          tags, 
           attachments 
         } : null 
       };
@@ -111,17 +99,9 @@ export const stepService = {
       const stepsWithPrompts = await Promise.all(steps.map(async (step) => {
         const prompt = await dbService.get('SELECT * FROM prompts WHERE step_id = ?', [step.id]);
         
-        let tags = [];
         let attachments = [];
       
         if (prompt) {
-          tags = await dbService.all(`
-            SELECT t.id, t.name 
-            FROM tags t
-            JOIN prompt_tags pt ON t.id = pt.tag_id
-            WHERE pt.prompt_id = ?
-          `, [prompt.id]);
-          
           // Get attachments list (without file data)
           // Add similar validation as in getStepWithPrompt
           try {
@@ -148,7 +128,7 @@ export const stepService = {
           }
         }
         
-        return { ...step, prompt: prompt ? { ...prompt, tags, attachments } : null };
+        return { ...step, prompt: prompt ? { ...prompt, attachments } : null };
       }));
       
       return stepsWithPrompts;
@@ -317,37 +297,6 @@ export const stepService = {
           promptId = promptResult.lastID;
           console.log(`[DEBUG] Created prompt with ID ${promptId}`);
           
-          // Insert tags if available
-          if (stepData.prompt.tags && stepData.prompt.tags.length > 0) {
-            // console.log(`Adding ${stepData.prompt.tags.length} tags for prompt ${promptId}`); // Removed log
-            
-            for (const tagName of stepData.prompt.tags) {
-              try {
-                // Check if tag exists
-                let tag = await dbService.get('SELECT id FROM tags WHERE name = ?', [tagName]);
-                
-                // If tag doesn't exist, create it
-                if (!tag) {
-                  const tagResult = await dbService.run('INSERT INTO tags (name) VALUES (?)', [tagName]);
-                  tag = { id: tagResult.lastID };
-                  // console.log(`Created new tag "${tagName}" with ID ${tag.id}`); // Removed log
-                } else {
-                  // console.log(`Using existing tag "${tagName}" with ID ${tag.id}`); // Removed log
-                }
-                
-                // Associate tag with prompt
-                await dbService.run(
-                  'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
-                  [promptId, tag.id]
-                );
-                // console.log(`Associated tag ${tag.id} with prompt ${promptId}`); // Removed log
-              } catch (tagError) {
-                console.error(`Error processing tag "${tagName}":`, tagError);
-                // Continue with other tags
-              }
-            }
-          }
-          
           // Add attachments if available
           if (stepData.prompt.attachments && stepData.prompt.attachments.length > 0) {
             console.log(`[DEBUG] Processing ${stepData.prompt.attachments.length} attachments for prompt ${promptId}`);
@@ -468,34 +417,6 @@ export const stepService = {
             [stepData.prompt.content, prompt.id]
           );
         
-          // Update tags if available
-          if (stepData.prompt.tags) {
-            // console.log(`Updating tags for prompt ${prompt.id}`); // Removed log
-            
-            // Remove existing tag associations
-            await dbService.run('DELETE FROM prompt_tags WHERE prompt_id = ?', [prompt.id]);
-          
-            // Add new tag associations
-            for (const tagName of stepData.prompt.tags) {
-              // Check if tag exists
-              let tag = await dbService.get('SELECT id FROM tags WHERE name = ?', [tagName]);
-            
-              // If tag doesn't exist, create it
-              if (!tag) {
-                const tagResult = await dbService.run('INSERT INTO tags (name) VALUES (?)', [tagName]);
-                tag = { id: tagResult.lastID };
-                // console.log(`Created new tag "${tagName}" with ID ${tag.id}`); // Removed log
-              }
-            
-              // Associate tag with prompt
-              await dbService.run(
-                'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
-                [prompt.id, tag.id]
-              );
-              // console.log(`Associated tag ${tag.id} with prompt ${prompt.id}`); // Removed log
-            }
-          }
-        
           // Handle attachments if available
           if (stepData.prompt.attachments) {
             // Any new attachments to add
@@ -550,30 +471,6 @@ export const stepService = {
           const promptId = promptResult.lastID;
           console.log(`[DEBUG] Created new prompt with ID ${promptId}`);
           
-          // Add tags if available
-          if (stepData.prompt.tags && stepData.prompt.tags.length > 0) {
-            // console.log(`Adding ${stepData.prompt.tags.length} tags for prompt ${promptId}`); // Removed log
-            
-            for (const tagName of stepData.prompt.tags) {
-              // Check if tag exists
-              let tag = await dbService.get('SELECT id FROM tags WHERE name = ?', [tagName]);
-            
-              // If tag doesn't exist, create it
-              if (!tag) {
-                const tagResult = await dbService.run('INSERT INTO tags (name) VALUES (?)', [tagName]);
-                tag = { id: tagResult.lastID };
-                // console.log(`Created new tag "${tagName}" with ID ${tag.id}`); // Removed log
-              }
-            
-              // Associate tag with prompt
-              await dbService.run(
-                'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
-                [promptId, tag.id]
-              );
-              // console.log(`Associated tag ${tag.id} with prompt ${promptId}`); // Removed log
-            }
-          }
-        
           // Add attachments if available
           if (stepData.prompt.attachments && stepData.prompt.attachments.length > 0) {
             console.log(`[DEBUG] Adding ${stepData.prompt.attachments.length} attachments for new prompt ${promptId}`);

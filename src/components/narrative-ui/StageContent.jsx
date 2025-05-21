@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Sparkles, ChevronLeft, ChevronRight, Edit, AlertCircle, Clipboard, Paperclip, RefreshCw, Bug } from 'lucide-react';
 import { useJourneyStore } from '../../hooks/useJourneyStore';
 import { colors } from '../../constants/colors';
@@ -7,6 +7,8 @@ import Tag from '../common/Tag';
 import AttachmentViewer from '../common/AttachmentViewer';
 import FileUploader from '../common/FileUploader';
 import { stepService } from '../../api/services/stepService';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 
 const StageContent = () => {
   // Select primitive state values directly
@@ -21,7 +23,7 @@ const StageContent = () => {
   const updateStep = useJourneyStore(state => state.updateStep);
   
   // Derive currentStep inside the component using useMemo
-  const currentStep = React.useMemo(() => {
+  const currentStep = useMemo(() => {
     if (currentStepIndex >= 0 && currentStepIndex < steps.length) {
       const step = steps[currentStepIndex];
       console.log('[STAGE_CONTENT] Current step derived:', {
@@ -59,6 +61,20 @@ const StageContent = () => {
     setIsEditing(false);
   }, [currentStep]); // Depend only on the derived step object
   
+  // Quill modules configuration
+  const quillModules = useMemo(() => ({
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+      [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
+      ['link', 'image', 'video'],
+      ['clean']
+    ],
+    clipboard: {
+      matchVisual: false,
+    }
+  }), []);
+
   // Check loading state based ONLY on presence of steps and valid index
   if (steps.length > 0 && currentStepIndex === -1) {
      return (
@@ -358,15 +374,18 @@ const StageContent = () => {
                 onClick={handleCopy}
                 disabled={!currentStep?.prompt?.content || copyStatus !== 'Copy'}
                 style={{
-                  backgroundColor: '#B5D1AE',
-                  color: colors.darkBrown,
+                  backgroundColor: currentStep.color,
+                  color: colors.white,
                 }}
+                className="hover:opacity-90"
               >
                 {copyStatus}
               </Button>
               <Button 
-                variant="secondary"
+                variant="primary"
                 onClick={togglePromptDetails}
+                style={{ backgroundColor: currentStep.color, color: colors.white }}
+                className="hover:opacity-90"
               >
                 {showPromptDetails ? 'Hide Details' : 'Show Details'}
               </Button>
@@ -410,7 +429,7 @@ const StageContent = () => {
                 variant="primary" 
                 icon={<Edit size={16} />}
                 onClick={() => {
-                  setEditedContent('');
+                  setEditedContent(currentStep.prompt?.content || '');
                   setIsEditing(true);
                 }}
                 style={{ backgroundColor: currentStep.color }}
@@ -427,23 +446,22 @@ const StageContent = () => {
                 backgroundColor: currentStep.color + '10',
                 borderLeft: `4px solid ${currentStep.color}`
               }}
+              dangerouslySetInnerHTML={{ __html: currentStep.prompt.content }}
             >
-              {currentStep.prompt.content}
+              {/* {currentStep.prompt.content} */}
             </div>
           )}
 
           {isEditing && (
-            <div className="transition-all duration-300 mb-6">
-              <textarea
-                className="w-full h-64 p-4 rounded-lg font-mono text-sm border focus:ring-2 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
-                style={{ 
-                  borderColor: colors.beige,
-                  backgroundColor: currentStep.color + '05',
-                  focusRingColor: currentStep.color 
-                }}
+            <div className="transition-all duration-300 mb-6 rich-text-editor-wrapper">
+              <ReactQuill 
+                theme="snow"
                 value={editedContent}
-                onChange={(e) => setEditedContent(e.target.value)}
+                onChange={setEditedContent}
+                modules={quillModules}
+                className="h-64 mb-12"
                 placeholder="Enter your prompt content here..."
+                style={{ backgroundColor: currentStep.color + '05' }}
               />
             </div>
           )}
@@ -466,24 +484,41 @@ const StageContent = () => {
                       attachments={currentStep.prompt.attachments} 
                       onDownload={handleAttachmentDownload}
                       onDelete={handleAttachmentDelete}
+                      stepColor={currentStep.color}
                     />
                   ) : (
-                    <div className="mt-4 p-3 border border-amber-200 bg-amber-50 dark:bg-amber-900 dark:border-amber-700 rounded-lg">
-                      <h4 className="text-sm font-medium text-charcoal dark:text-amber-100 mb-1">Attachments</h4>
-                      <p className="text-xs text-darkBrown dark:text-amber-200">No attachments found for this prompt.</p>
+                    <div 
+                      className="mt-4 p-3 border rounded-lg"
+                      style={{
+                        borderColor: `${currentStep.color}33`,
+                        backgroundColor: `${currentStep.color}1A`,
+                      }}
+                    >
+                      <h4 
+                        className="text-sm font-medium mb-1"
+                        style={{ color: currentStep.color }}
+                      >
+                        Attachments
+                      </h4>
+                      <p 
+                        className="text-xs"
+                        style={{ color: `${currentStep.color}B3` }}
+                      >
+                        No attachments found for this prompt.
+                      </p>
                     </div>
                   )}
                 </>
               )}
               
               {!isEditing && !isAddingAttachments && (
-                <div className="mt-4 text-right">
+                <div className="mt-4 flex justify-end">
                   <Button
-                    variant="primary"
+                    variant="primary" 
                     onClick={() => setIsAddingAttachments(true)}
                     icon={<Paperclip size={16} />}
-                    className="text-white dark:text-gray-900 hover:opacity-90"
-                    style={{ backgroundColor: colors.skyBlue, borderRadius: '9999px', padding: '0.5rem 1rem' }}
+                    className="text-white dark:text-gray-900 hover:opacity-90" 
+                    style={{ backgroundColor: currentStep.color, borderRadius: '9999px', padding: '0.5rem 1rem' }}
                   >
                     Add Attachments
                   </Button>
@@ -507,7 +542,7 @@ const StageContent = () => {
                     <Button 
                       variant="primary"
                       onClick={handleAddAttachments}
-                      style={{ backgroundColor: colors.sage }}
+                      style={{ backgroundColor: currentStep.color, color: colors.white }}
                       disabled={attachmentsToAdd.length === 0}
                     >
                       Save Attachments

@@ -1,8 +1,8 @@
 import { openDb } from '../../db/database';
 
 export const promptService = {
-  // Get prompt by ID with tags
-  async getPromptWithTags(promptId) {
+  // Get prompt by ID (tags removed)
+  async getPrompt(promptId) {
     const db = await openDb();
     
     // Get prompt
@@ -12,15 +12,7 @@ export const promptService = {
       throw new Error(`Prompt with ID ${promptId} not found`);
     }
     
-    // Get tags for prompt
-    const tags = await db.all(`
-      SELECT t.id, t.name 
-      FROM tags t
-      JOIN prompt_tags pt ON t.id = pt.tag_id
-      WHERE pt.prompt_id = ?
-    `, promptId);
-    
-    return { ...prompt, tags };
+    return prompt;
   },
   
   // Update a prompt
@@ -33,31 +25,7 @@ export const promptService = {
       [promptData.content, promptId]
     );
     
-    // Update tags if provided
-    if (promptData.tags) {
-      // Remove existing tag associations
-      await db.run('DELETE FROM prompt_tags WHERE prompt_id = ?', promptId);
-      
-      // Add new tag associations
-      for (const tagName of promptData.tags) {
-        // Check if tag exists
-        let tag = await db.get('SELECT id FROM tags WHERE name = ?', tagName);
-        
-        // If tag doesn't exist, create it
-        if (!tag) {
-          const tagResult = await db.run('INSERT INTO tags (name) VALUES (?)', tagName);
-          tag = { id: tagResult.lastID };
-        }
-        
-        // Associate tag with prompt
-        await db.run(
-          'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)',
-          [promptId, tag.id]
-        );
-      }
-    }
-    
-    return this.getPromptWithTags(promptId);
+    return this.getPrompt(promptId);
   },
   
   // Record prompt usage
@@ -69,7 +37,7 @@ export const promptService = {
       promptId
     );
     
-    return this.getPromptWithTags(promptId);
+    return this.getPrompt(promptId);
   },
   
   // Store AI output for a prompt

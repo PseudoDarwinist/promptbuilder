@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { colors } from '../../constants/colors';
 import Button from '../common/Button';
-import TagsInput from '../common/TagsInput';
 import FileUploader from '../common/FileUploader';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 import { 
   Compass, Map, Code, Zap, BookOpen, 
   Lightbulb, Layers, PenTool, FileText,
@@ -30,7 +31,6 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
     color: initialData.color || colors.terracotta,
     prompt: {
       content: initialData.prompt?.content || '',
-      tags: initialData.prompt?.tags?.map(tag => tag.name) || [],
       attachments: initialData.prompt?.attachments || []
     }
   });
@@ -90,14 +90,17 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
     '#012731'  // Daintree
   ];
   
-  const availableTags = [
-    'Requirements', 'Planning', 'Design', 'Development', 
-    'Testing', 'Client', 'Documentation', 'Research'
-  ];
-  
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name.startsWith('prompt.')) {
+    if (name === 'prompt.content') {
+      setFormData(prev => ({
+        ...prev,
+        prompt: {
+          ...prev.prompt,
+          content: value
+        }
+      }));
+    } else if (name.startsWith('prompt.')) {
       const promptField = name.split('.')[1];
       setFormData(prev => ({
         ...prev,
@@ -116,22 +119,25 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
     }
   };
   
+  const handlePromptContentChange = (content) => {
+    setFormData(prev => ({
+      ...prev,
+      prompt: {
+        ...prev.prompt,
+        content: content
+      }
+    }));
+    if (errors['prompt.content']) {
+      setErrors(prev => ({ ...prev, ['prompt.content']: null }));
+    }
+  };
+  
   const handleIconSelect = (icon) => {
     setFormData(prev => ({ ...prev, icon }));
   };
   
   const handleColorSelect = (color) => {
     setFormData(prev => ({ ...prev, color }));
-  };
-  
-  const handleTagsChange = (tags) => {
-    setFormData(prev => ({
-      ...prev,
-      prompt: {
-        ...prev.prompt,
-        tags
-      }
-    }));
   };
   
   const handleAttachmentsChange = (attachments) => {
@@ -444,14 +450,21 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
         <label className="block text-sm font-medium text-charcoal mb-1" htmlFor="prompt.content">
           Prompt Content
         </label>
-        <textarea
-          id="prompt.content"
-          name="prompt.content"
+        <ReactQuill 
+          theme="snow"
           value={formData.prompt.content}
-          onChange={handleChange}
-          className={`w-full p-3 border rounded-lg font-mono text-sm ${errors['prompt.content'] ? 'border-red-500' : 'border-beige'}`}
-          rows="8"
+          onChange={handlePromptContentChange}
+          className={`font-mono text-sm ${errors['prompt.content'] ? 'ql-error' : ''}`}
           placeholder="Enter the prompt text here..."
+          modules={{
+            toolbar: [
+              [{ 'header': [1, 2, 3, false] }],
+              ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+              [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
+              ['link', 'image'],
+              ['clean']
+            ],
+          }}
         />
         {errors['prompt.content'] && <p className="text-red-500 text-xs mt-1">{errors['prompt.content']}</p>}
       </div>
@@ -463,17 +476,6 @@ const StepForm = ({ initialData = {}, onSubmit, onCancel, journeyId }) => {
         <FileUploader 
           files={formData.prompt.attachments}
           onChange={handleAttachmentsChange}
-        />
-      </div>
-      
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-charcoal mb-1">
-          Tags
-        </label>
-        <TagsInput 
-          tags={formData.prompt.tags} 
-          onChange={handleTagsChange} 
-          availableTags={availableTags}
         />
       </div>
       

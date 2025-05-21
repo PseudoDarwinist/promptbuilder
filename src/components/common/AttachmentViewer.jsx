@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Download, File, Image, FileText, ExternalLink, Trash, X, Maximize2 } from 'lucide-react';
 import { colors } from '../../constants/colors';
 
-const AttachmentViewer = ({ attachments = [], onDownload, onDelete }) => {
+const AttachmentViewer = ({ attachments = [], onDownload, onDelete, stepColor }) => {
   const [selectedAttachment, setSelectedAttachment] = useState(null);
   
   // Close modal when pressing Escape key
@@ -54,9 +54,25 @@ const AttachmentViewer = ({ attachments = [], onDownload, onDelete }) => {
   if (!attachments || !Array.isArray(attachments) || attachments.length === 0) {
     console.log('[ATTACHMENT VIEWER] No attachments to display');
     return (
-      <div className="mt-4 p-3 border border-amber-200 bg-amber-50 rounded-lg">
-        <h3 className="text-sm font-medium text-amber-700 mb-1">No Attachments</h3>
-        <p className="text-xs text-amber-600">This prompt doesn't have any attachments.</p>
+      <div 
+        className="mt-4 p-3 border rounded-lg"
+        style={{
+          borderColor: stepColor ? `${stepColor}33` : colors.amber[200],
+          backgroundColor: stepColor ? `${stepColor}1A` : colors.amber[50],
+        }}
+      >
+        <h3 
+          className="text-sm font-medium mb-1"
+          style={{ color: stepColor || colors.amber[700] }}
+        >
+          No Attachments
+        </h3>
+        <p 
+          className="text-xs"
+          style={{ color: stepColor ? `${stepColor}B3` : colors.amber[600] }}
+        >
+          This prompt doesn't have any attachments.
+        </p>
       </div>
     );
   }
@@ -69,9 +85,25 @@ const AttachmentViewer = ({ attachments = [], onDownload, onDelete }) => {
   if (validAttachments.length === 0) {
     console.log('[ATTACHMENT VIEWER] All attachments were invalid');
     return (
-      <div className="mt-4 p-3 border border-amber-200 bg-amber-50 rounded-lg">
-        <h3 className="text-sm font-medium text-amber-700 mb-1">Attachment Error</h3>
-        <p className="text-xs text-amber-600">The attachments data is invalid or corrupted.</p>
+      <div 
+        className="mt-4 p-3 border rounded-lg"
+        style={{
+          borderColor: stepColor ? `${stepColor}33` : colors.amber[200],
+          backgroundColor: stepColor ? `${stepColor}1A` : colors.amber[50],
+        }}
+      >
+        <h3 
+          className="text-sm font-medium mb-1"
+          style={{ color: stepColor || colors.amber[700] }}
+        >
+          Attachment Error
+        </h3>
+        <p 
+          className="text-xs"
+          style={{ color: stepColor ? `${stepColor}B3` : colors.amber[600] }}
+        >
+          The attachments data is invalid or corrupted.
+        </p>
       </div>
     );
   }
@@ -148,8 +180,17 @@ const AttachmentViewer = ({ attachments = [], onDownload, onDelete }) => {
   };
   
   return (
-    <div className="mt-4 border border-terracotta border-opacity-20 bg-terracotta bg-opacity-5 rounded-lg p-2">
-      <h3 className="text-xs font-medium text-terracotta mb-1">
+    <div 
+      className="mt-4 border rounded-lg p-2"
+      style={{
+        borderColor: stepColor ? `${stepColor}33` : colors.terracotta + '33',
+        backgroundColor: stepColor ? `${stepColor}1A` : colors.terracotta + '0D',
+      }}
+    >
+      <h3 
+        className="text-xs font-medium mb-1"
+        style={{ color: stepColor || colors.terracotta }}
+      >
         Attachments ({validAttachments.length})
       </h3>
       <div className="inline-grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-1">
